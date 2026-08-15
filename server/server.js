@@ -1,11 +1,15 @@
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
+import authRoutes from "./routes/auth.route.js";
 
 const app = express();
+const PORT = 5000;
 dotenv.config();
 
 app.use(express.json());
+app.use(cookieParser());
 
 app.get("/", (req, res) => {
     res.json({
@@ -13,6 +17,8 @@ app.get("/", (req, res) => {
         message: "Welcome to Vyapix API"
     });
 });
+
+app.use("/api/auth", authRoutes);
 
 const connectDB = async () => {
     try {
@@ -25,6 +31,6 @@ const connectDB = async () => {
 }
 connectDB();
 
-app.listen(5000, () => {
+app.listen(PORT, () => {
     console.log("Server is running...")
 })
