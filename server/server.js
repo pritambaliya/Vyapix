@@ -9,6 +9,7 @@ const PORT = 5000;
 dotenv.config();
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.get("/", (req, res) => {

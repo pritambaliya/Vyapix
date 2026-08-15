@@ -3,6 +3,7 @@ import validator from "validator";
 import Owner from "../models/owner.model.js";
 import Shop from "../models/shop.model.js";
 import generateToken from "../utils/generateToken.js";
+import uploadToCloudinary from "../utils/uploadToCloudinary.js";
 
 export const registerOwner = async (req, res) => {
     try {
@@ -49,12 +50,34 @@ export const registerOwner = async (req, res) => {
             password: hashedPassword,
         });
 
+        let logo = {
+            url: null,
+            publicId: null,
+            source: "generated",
+        };
+
+        const logoFile = req.files?.logo?.[0];
+
+        if (logoFile) {
+            const result = await uploadToCloudinary(
+                logoFile.buffer,
+                "vyapix/logo"
+            );
+
+            logo = {
+                url: result.secure_url,
+                publicId: result.public_id,
+                source: "upload",
+            };
+        }
+
         const shop = await Shop.create({
             ownerId: owner._id,
             shopName,
             phone: shopPhone,
             address,
             gstNumber,
+            logo
         });
 
         return res.status(201).json({
@@ -73,6 +96,10 @@ export const registerOwner = async (req, res) => {
                     phone: shop.phone,
                     address: shop.address,
                     gstNumber: shop.gstNumber,
+                    logo: {
+                        url: req.files?.idProof?.[0]?.path,
+                        public_id: req.files?.idProof?.[0]?.filename
+                    },
                 },
             },
         });
@@ -150,6 +177,24 @@ export const loginOwner = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Server error while logging in",
+        });
+    }
+};
+
+export const getOwnerProfile = async (req, res) => {
+    try {
+        return res.status(200).json({
+            success: true,
+            data: {
+                owner: req.owner,
+            },
+        });
+    } catch (error) {
+        console.error("Get Owner Profile Error:", error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
         });
     }
 };
