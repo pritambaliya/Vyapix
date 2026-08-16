@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.route.js";
+import shopRoutes from "./routes/shop.route.js";
+import billingAccountRoutes from "./routes/billingAccount.route.js";
 
 const app = express();
 const PORT = 5000;
@@ -20,6 +22,8 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/shop", shopRoutes);
+app.use("/api/billing-accounts", billingAccountRoutes);
 
 const connectDB = async () => {
     try {
