@@ -198,3 +198,37 @@ export const getOwnerProfile = async (req, res) => {
         });
     }
 };
+
+export const logout = async (req, res) => {
+    try {
+        res.clearCookie("token", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite:
+                process.env.NODE_ENV === "production"
+                    ? "none"
+                    : "lax",
+        });
+
+        res.clearCookie("billingToken", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite:
+                process.env.NODE_ENV === "production"
+                    ? "none"
+                    : "lax",
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Logged out successfully",
+        });
+    } catch (error) {
+        console.error("Logout Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Server error while logging out",
+        });
+    }
+};

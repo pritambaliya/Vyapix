@@ -348,3 +348,161 @@ export const updateBillingAccountStatus = async (req, res) => {
         });
     }
 };
+
+export const getBillingAccountActivity = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const account = await BillingAccount.findOne({
+            _id: id,
+            ownerId: req.owner._id,
+        });
+
+        if (!account) {
+            return res.status(404).json({
+                success: false,
+                message: "Billing account not found",
+            });
+        }
+
+        const activities =
+            await BillingActivity.find({
+                ownerId: req.owner._id,
+                billingAccountId: account._id,
+            })
+                .sort({ createdAt: -1 })
+                .limit(100);
+
+        return res.status(200).json({
+            success: true,
+
+            data: {
+                billingAccount: {
+                    id: account._id,
+                    accountNumber:
+                        account.accountNumber,
+                    name: account.name,
+                    employeeName:
+                        account.employeeName,
+                },
+
+                activities,
+            },
+        });
+    } catch (error) {
+        console.error(
+            "Get Billing Activity Error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Server error while fetching activity",
+        });
+    }
+};
+
+export const resetBillingPassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const {ownerPassword, newPassword, confirmPassword } = req.body;
+
+        if (!ownerPassword || !newPassword || !confirmPassword) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Owner password, new password and confirm password are required",
+            });
+        }
+
+        if (newPassword !== confirmPassword) {
+            return res.status(400).json({
+                success: false,
+                message: "New passwords do not match",
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "New password must be at least 6 characters",
+            });
+        }
+
+        const owner = await Owner.findById(
+            req.owner._id
+        );
+
+        if (!owner) {
+            return res.status(404).json({
+                success: false,
+                message: "Owner not found",
+            });
+        }
+
+        const isOwnerPasswordValid =
+            await bcrypt.compare(
+                ownerPassword,
+                owner.password
+            );
+
+        if (!isOwnerPasswordValid) {
+            return res.status(401).json({
+                success: false,
+                message: "Owner password is incorrect",
+            });
+        }
+
+        const account =
+            await BillingAccount.findOne({
+                _id: id,
+                ownerId: req.owner._id,
+            });
+
+        if (!account) {
+            return res.status(404).json({
+                success: false,
+                message: "Billing account not found",
+            });
+        }
+
+        const passwordHash =
+            await bcrypt.hash(newPassword, 10);
+
+        account.passwordHash = passwordHash;
+
+        await account.save();
+
+        await BillingActivity.create({
+            ownerId: req.owner._id,
+            shopId: account.shopId,
+            billingAccountId: account._id,
+
+            type: "account_updated",
+
+            description:
+                `Billing password reset for ${account.accountNumber}`,
+        });
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "Billing password reset successfully",
+        });
+
+    } catch (error) {
+        console.error(
+            "Reset Billing Password Error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Server error while resetting billing password",
+        });
+    }
+};

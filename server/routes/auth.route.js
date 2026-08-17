@@ -1,5 +1,5 @@
 import express from "express";
-import { registerOwner, loginOwner, getOwnerProfile } from "../controllers/auth.controller.js";
+import { registerOwner, loginOwner, getOwnerProfile, logout } from "../controllers/auth.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
 import upload from "../middleware/upload.middleware.js";
 
@@ -14,5 +14,6 @@ router.post("/register",
     ]), registerOwner);
 router.post("/login", loginOwner);
 router.get("/me", authMiddleware, getOwnerProfile);
+router.post("/logout", logout);
 
 export default router;

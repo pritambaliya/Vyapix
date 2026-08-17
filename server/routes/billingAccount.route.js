@@ -1,5 +1,5 @@
 import express from "express";
-import { createBillingAccount, loginBillingAccount, getBillingProfile, updateBillingAccountStatus } from "../controllers/billingAccount.controller.js";
+import { createBillingAccount, loginBillingAccount, getBillingProfile, updateBillingAccountStatus, getBillingAccountActivity, resetBillingPassword } from "../controllers/billingAccount.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
 import billingMiddleware from "../middleware/billing.middleware.js";
 
@@ -24,8 +24,20 @@ router.get(
 
 router.patch(
     "/:id/status",
-    billingMiddleware,
+    authMiddleware,
     updateBillingAccountStatus
+);
+
+router.get(
+    "/:id/activity",
+    authMiddleware,
+    getBillingAccountActivity
+);
+
+router.patch(
+    "/:id/reset-password",
+    authMiddleware,
+    resetBillingPassword
 );
 
 export default router;
