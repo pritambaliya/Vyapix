@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.route.js";
 import shopRoutes from "./routes/shop.route.js";
 import billingAccountRoutes from "./routes/billingAccount.route.js";
 import productRoutes from "./routes/product.routes.js";
+import billRoutes from "./routes/bill.routes.js";
 
 const app = express();
 const PORT = 5000;
@@ -26,6 +27,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/shop", shopRoutes);
 app.use("/api/billing-accounts", billingAccountRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/bills", billRoutes);
 
 const connectDB = async () => {
     try {
