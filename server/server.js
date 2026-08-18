@@ -6,7 +6,7 @@ import authRoutes from "./routes/auth.route.js";
 import shopRoutes from "./routes/shop.route.js";
 import billingAccountRoutes from "./routes/billingAccount.route.js";
 import productRoutes from "./routes/product.routes.js";
-import billRoutes from "./routes/bill.routes.js";
+import billRoutes from "./routes/bill.route.js";
 
 const app = express();
 const PORT = 5000;

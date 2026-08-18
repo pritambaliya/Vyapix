@@ -37,6 +37,7 @@ const billingActivitySchema = new mongoose.Schema(
                 "bill_created",
                 "bill_cancelled",
                 "bill_updated",
+                "bill_refunded",
 
                 "shift_started",
                 "shift_closed",
