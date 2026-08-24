@@ -1,9 +1,30 @@
-import express from "express";
-import { createBillingAccount, loginBillingAccount, getBillingProfile, updateBillingAccountStatus, getBillingAccountActivity, resetBillingPassword } from "../controllers/billingAccount.controller.js";
+﻿import express from "express";
+import {
+    createBillingAccount,
+    loginBillingAccount,
+    getBillingProfile,
+    updateBillingAccountStatus,
+    getBillingAccountActivity,
+    resetBillingPassword,
+    getBillingAccounts,
+    getAllBillingActivities
+} from "../controllers/billingAccount.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
 import billingMiddleware from "../middleware/billing.middleware.js";
 
 const router = express.Router();
+
+router.get(
+    "/",
+    authMiddleware,
+    getBillingAccounts
+);
+
+router.get(
+    "/activities",
+    authMiddleware,
+    getAllBillingActivities
+);
 
 router.post(
     "/register",

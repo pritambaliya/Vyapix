@@ -506,3 +506,50 @@ export const resetBillingPassword = async (req, res) => {
         });
     }
 };
+
+export const getBillingAccounts = async (req, res) => {
+    try {
+        const accounts = await BillingAccount.find({
+            ownerId: req.owner._id,
+        })
+        .select("-passwordHash")
+        .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                billingAccounts: accounts,
+            },
+        });
+    } catch (error) {
+        console.error("Get Billing Accounts Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error while fetching billing accounts",
+        });
+    }
+};
+
+export const getAllBillingActivities = async (req, res) => {
+    try {
+        const activities = await BillingActivity.find({
+            ownerId: req.owner._id,
+        })
+        .populate("billingAccountId", "accountNumber name employeeName")
+        .sort({ createdAt: -1 })
+        .limit(100);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                activities,
+            },
+        });
+    } catch (error) {
+        console.error("Get All Billing Activities Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error while fetching activities",
+        });
+    }
+};

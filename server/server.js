@@ -1,7 +1,8 @@
-import express from "express";
+﻿import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import authRoutes from "./routes/auth.route.js";
 import shopRoutes from "./routes/shop.route.js";
 import billingAccountRoutes from "./routes/billingAccount.route.js";
@@ -11,6 +12,16 @@ import billRoutes from "./routes/bill.route.js";
 const app = express();
 const PORT = 5000;
 dotenv.config();
+
+app.use(cors({
+    origin: [
+        process.env.CLIENT_URL || "http://localhost:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000"
+    ],
+    credentials: true,
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -41,5 +52,5 @@ const connectDB = async () => {
 connectDB();
 
 app.listen(PORT, () => {
-    console.log("Server is running...")
+    console.log("Server is running on port " + PORT)
 })

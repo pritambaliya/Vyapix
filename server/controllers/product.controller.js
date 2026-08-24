@@ -121,13 +121,16 @@ export const createProduct = async (req, res) => {
 
 export const getProducts = async (req, res) => {
     try {
-        const ownerId =
-            req.owner?._id ||
-            req.billingAccount?.ownerId;
+        let ownerId = req.owner?._id || req.billingAccount?.ownerId;
+        let shopId = req.billingAccount?.shopId;
 
-        const shopId =
-            req.owner?.shopId ||
-            req.billingAccount?.shopId;
+        if (req.owner) {
+            const Shop = (await import("../models/shop.model.js")).default;
+            const shop = await Shop.findOne({ ownerId: req.owner._id });
+            if (shop) {
+                shopId = shop._id;
+            }
+        }
 
         if (!ownerId || !shopId) {
             return res.status(401).json({
@@ -631,6 +634,38 @@ export const updateProduct = async (req, res) => {
             success: false,
             message:
                 "Server error while updating product",
+        });
+    }
+};
+
+export const deleteProduct = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const product = await Product.findOne({
+            _id: id,
+            ownerId: req.owner._id,
+        });
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found",
+            });
+        }
+
+        product.isActive = false;
+        await product.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Product deleted successfully",
+        });
+    } catch (error) {
+        console.error("Delete Product Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error while deleting product",
         });
     }
 };

@@ -1,9 +1,7 @@
-import BillingAccount from "../models/billingAccount.model.js";
+﻿import BillingAccount from "../models/billingAccount.model.js";
 
 export const generateAccountNumber = async (shopId) => {
-    const lastAccount = await BillingAccount.findOne({
-        shopId,
-    }).sort({
+    const lastAccount = await BillingAccount.findOne().sort({
         createdAt: -1,
     });
 
@@ -17,5 +15,11 @@ export const generateAccountNumber = async (shopId) => {
         }
     }
 
-    return `BILL-${String(nextNumber).padStart(4, "0")}`;
+    let accNo = `BILL-${String(nextNumber).padStart(4, "0")}`;
+    while (await BillingAccount.exists({ accountNumber: accNo })) {
+        nextNumber++;
+        accNo = `BILL-${String(nextNumber).padStart(4, "0")}`;
+    }
+
+    return accNo;
 };

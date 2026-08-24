@@ -1,5 +1,14 @@
-import express from "express";
-import { createProduct, getProducts, getProductByBarcode, addStock, removeStock, getInventoryHistory, updateProduct} from "../controllers/product.controller.js";
+﻿import express from "express";
+import {
+    createProduct,
+    getProducts,
+    getProductByBarcode,
+    addStock,
+    removeStock,
+    getInventoryHistory,
+    updateProduct,
+    deleteProduct
+} from "../controllers/product.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
 import billingMiddleware from "../middleware/billing.middleware.js";
 
@@ -51,6 +60,12 @@ router.patch(
     "/:id",
     authMiddleware,
     updateProduct
+);
+
+router.delete(
+    "/:id",
+    authMiddleware,
+    deleteProduct
 );
 
 export default router;
