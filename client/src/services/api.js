@@ -10,7 +10,6 @@ const api = axios.create({
   },
 });
 
-// Response interceptor for unified error parsing
 api.interceptors.response.use(
   (response) => response,
   (error) => {

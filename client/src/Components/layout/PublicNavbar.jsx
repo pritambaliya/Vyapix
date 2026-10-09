@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   ChevronDown,
@@ -18,7 +18,24 @@ export const PublicNavbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileDropdown, setMobileDropdown] = useState(null);
 
+  const [scrolled, setScrolled] = useState(false);
+
+useEffect(() => {
+  const handleScroll = () => {
+    setScrolled(window.scrollY > 50);
+  };
+
+  window.addEventListener('scroll', handleScroll);
+  handleScroll();
+
+  return () => window.removeEventListener('scroll', handleScroll);
+}, []);
+
   const navLinks = [
+    {
+      name: 'Home',
+      path: '/',
+    },
     {
       name: 'Features',
       dropdown: true,
@@ -38,9 +55,18 @@ export const PublicNavbar = () => {
         { name: 'Small Business', path: '/solutions/business' },
       ],
     },
-    { name: 'Pricing', path: '/pricing' },
-    { name: 'About Us', path: '/about' },
-    { name: 'Contact', path: '/contact' },
+    {
+      name: 'Pricing',
+      path: '/pricing',
+    },
+    {
+      name: 'About Us',
+      path: '/about',
+    },
+    {
+      name: 'Contact',
+      path: '/contact',
+    },
   ];
 
   const closeMobileMenu = () => {
@@ -48,17 +74,34 @@ export const PublicNavbar = () => {
     setMobileDropdown(null);
   };
 
-  return (
-    <header className="sticky top-0 z-50 bg-white border-b border-slate-100">
-      <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
+  const isLinkActive = (path) => {
+    if (path === '/') {
+      return location.pathname === '/';
+    }
 
-        {/* ================= DESKTOP / HEADER ================= */}
-        <div className="h-[68px] flex items-center justify-between">
+    return (
+      location.pathname === path ||
+      location.pathname.startsWith(`${path}/`)
+    );
+  };
+
+  return (
+<header
+  className={`sticky top-0 z-50 border-b transition-all duration-300 ${
+    scrolled
+      ? 'border-transparent bg-transparent backdrop-blur-sm'
+      : 'border-slate-100 bg-white shadow-s'
+  }`}
+>
+      <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+
+        {/* Header */}
+        <div className="flex h-[85px] items-center justify-between">
 
           {/* Logo */}
           <Link
             to="/"
-            className="flex-shrink-0"
+            className="shrink-0"
             onClick={closeMobileMenu}
           >
             <BrandLogo
@@ -69,101 +112,75 @@ export const PublicNavbar = () => {
             />
           </Link>
 
-          {/* ================= DESKTOP NAVIGATION ================= */}
-          <nav className="hidden lg:flex items-center gap-1 ml-8">
+          {/* Desktop Navigation */}
+          <nav className="ml-8 hidden items-center gap-1 lg:flex">
             {navLinks.map((link) => {
               if (link.dropdown) {
+                const isDropdownActive = link.items.some((item) =>
+                  isLinkActive(item.path)
+                );
+
                 return (
                   <div
                     key={link.name}
-                    className="relative group"
+                    className="group relative"
                   >
                     <button
                       type="button"
-                      className="
-                        flex items-center gap-1
-                        px-3.5 py-2.5
-                        text-[14px]
-                        font-medium
-                        text-slate-700
-                        hover:text-orange-600
-                        transition-colors
-                      "
+                      className={`flex items-center gap-1 rounded-lg px-3 py-2.5 font-sans text-[14px] font-medium transition-colors ${
+                        isDropdownActive
+                          ? 'text-orange-600'
+                          : 'text-slate-700 hover:text-orange-600'
+                      }`}
                     >
                       {link.name}
 
                       <ChevronDown
                         size={15}
                         strokeWidth={1.8}
-                        className="
-                          transition-transform
-                          group-hover:rotate-180
-                        "
+                        className="transition-transform duration-200 group-hover:rotate-180"
                       />
                     </button>
 
                     {/* Desktop Dropdown */}
-                    <div
-                      className="
-                        absolute left-0 top-full pt-2
-                        opacity-0 invisible translate-y-1
-                        group-hover:opacity-100
-                        group-hover:visible
-                        group-hover:translate-y-0
-                        transition-all duration-200
-                      "
-                    >
-                      <div
-                        className="
-                          w-60
-                          bg-white
-                          border border-slate-100
-                          rounded-xl
-                          shadow-xl shadow-slate-200/50
-                          p-2
-                        "
-                      >
-                        {link.items.map((item) => (
-                          <Link
-                            key={item.path}
-                            to={item.path}
-                            className="
-                              block
-                              px-3.5 py-2.5
-                              rounded-lg
-                              text-[14px]
-                              text-slate-600
-                              hover:text-orange-600
-                              hover:bg-orange-50
-                              transition-colors
-                            "
-                          >
-                            {item.name}
-                          </Link>
-                        ))}
+                    <div className="invisible absolute left-0 top-full z-50 translate-y-2 pt-2 opacity-0 transition-all duration-200 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
+                      <div className="w-60 rounded-xl border border-slate-100 bg-white p-2 shadow-xl shadow-slate-200/50">
+                        {link.items.map((item) => {
+                          const active = isLinkActive(item.path);
+
+                          return (
+                            <Link
+                              key={item.path}
+                              to={item.path}
+                              className={`block rounded-lg px-3.5 py-2.5 font-sans text-[14px] transition-colors ${
+                                active
+                                  ? 'bg-orange-50 font-semibold text-orange-600'
+                                  : 'text-slate-600 hover:bg-orange-50 hover:text-orange-600'
+                              }`}
+                            >
+                              {item.name}
+                            </Link>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
                 );
               }
 
-              const isActive = location.pathname === link.path;
+              const isActive = isLinkActive(link.path);
 
               return (
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`
-                    px-3.5 py-2.5
-                    text-[14px]
-                    font-medium
-                    transition-colors
-                    ${
-                      isActive
-                        ? 'text-orange-600'
-                        : 'text-slate-700 hover:text-orange-600'
-                    }
-                  `}
+                  onClick={closeMobileMenu}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`rounded-lg px-3 py-2.5 font-sans text-[14px] font-medium transition-colors ${
+                    isActive
+                      ? 'text-orange-600'
+                      : 'text-slate-700 hover:text-orange-600'
+                  }`}
                 >
                   {link.name}
                 </Link>
@@ -171,29 +188,20 @@ export const PublicNavbar = () => {
             })}
           </nav>
 
-          {/* ================= DESKTOP RIGHT ACTIONS ================= */}
-          <div className="hidden lg:flex items-center gap-3 ml-auto">
+          {/* Desktop Actions */}
+          <div className="ml-auto hidden items-center gap-3 lg:flex">
 
             {!isAuthenticated && (
               <Link
                 to="/login"
-                className="
-                  text-[14px]
-                  font-semibold
-                  text-slate-700
-                  hover:text-orange-600
-                  transition-colors
-                  px-2
-                "
+                className="px-2 font-sans text-[14px] font-semibold text-slate-700 transition-colors hover:text-orange-600"
               >
                 Login
               </Link>
             )}
 
             {isAuthenticated ? (
-              <Link
-                to={isOwner ? '/dashboard' : '/billing'}
-              >
+              <Link to={isOwner ? '/dashboard' : '/billing'}>
                 <Button
                   variant="primary"
                   size="sm"
@@ -204,43 +212,23 @@ export const PublicNavbar = () => {
                 </Button>
               </Link>
             ) : (
-              <Link to="/register">
-                <button
-                  className="
-                    h-10
-                    px-5
-                    rounded-lg
-                    bg-orange-500
-                    hover:bg-orange-600
-                    text-white
-                    text-[14px]
-                    font-semibold
-                    shadow-sm
-                    hover:shadow-md
-                    transition-all
-                  "
-                >
-                  Start Free
-                </button>
+              <Link
+                to="/register"
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-orange-500 px-5 font-sans text-[14px] font-semibold text-white shadow-sm transition-all hover:bg-orange-600 hover:shadow-md"
+              >
+                Start Free
               </Link>
             )}
 
           </div>
 
-          {/* ================= MOBILE MENU BUTTON ================= */}
+          {/* Mobile Menu Button */}
           <button
             type="button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="
-              lg:hidden
-              flex items-center justify-center
-              w-10 h-10
-              rounded-lg
-              text-slate-700
-              hover:bg-slate-100
-              transition-colors
-            "
-            aria-label="Toggle menu"
+            onClick={() => setMobileMenuOpen((open) => !open)}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-700 transition-colors hover:bg-slate-100 lg:hidden"
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? (
               <X size={24} />
@@ -251,73 +239,65 @@ export const PublicNavbar = () => {
 
         </div>
 
-        {/* ================= MOBILE MENU ================= */}
+        {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-slate-100 py-4">
-
+          <div className="border-t border-slate-100 py-4 lg:hidden">
             <nav className="flex flex-col">
 
               {navLinks.map((link) => {
                 if (link.dropdown) {
                   const isOpen = mobileDropdown === link.name;
+                  const isDropdownActive = link.items.some((item) =>
+                    isLinkActive(item.path)
+                  );
 
                   return (
                     <div key={link.name}>
 
-                      {/* Dropdown Header */}
+                      {/* Mobile Dropdown Header */}
                       <button
                         type="button"
                         onClick={() =>
-                          setMobileDropdown(
-                            isOpen ? null : link.name
-                          )
+                          setMobileDropdown(isOpen ? null : link.name)
                         }
-                        className="
-                          w-full
-                          flex items-center justify-between
-                          px-3 py-3
-                          rounded-lg
-                          text-[15px]
-                          font-medium
-                          text-slate-700
-                          hover:bg-orange-50
-                          hover:text-orange-600
-                        "
+                        aria-expanded={isOpen}
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-3 font-sans text-[15px] font-medium transition-colors ${
+                          isDropdownActive
+                            ? 'text-orange-600'
+                            : 'text-slate-700 hover:bg-orange-50 hover:text-orange-600'
+                        }`}
                       >
                         {link.name}
 
                         <ChevronDown
                           size={18}
-                          className={`
-                            transition-transform
-                            ${isOpen ? 'rotate-180' : ''}
-                          `}
+                          className={`transition-transform duration-200 ${
+                            isOpen ? 'rotate-180' : ''
+                          }`}
                         />
                       </button>
 
                       {/* Mobile Dropdown Items */}
                       {isOpen && (
-                        <div className="ml-3 pl-3 border-l border-orange-100">
+                        <div className="ml-3 border-l border-orange-100 pl-3">
+                          {link.items.map((item) => {
+                            const active = isLinkActive(item.path);
 
-                          {link.items.map((item) => (
-                            <Link
-                              key={item.path}
-                              to={item.path}
-                              onClick={closeMobileMenu}
-                              className="
-                                block
-                                px-3 py-2.5
-                                text-sm
-                                text-slate-600
-                                hover:text-orange-600
-                                hover:bg-orange-50
-                                rounded-lg
-                              "
-                            >
-                              {item.name}
-                            </Link>
-                          ))}
-
+                            return (
+                              <Link
+                                key={item.path}
+                                to={item.path}
+                                onClick={closeMobileMenu}
+                                className={`block rounded-lg px-3 py-2.5 font-sans text-sm transition-colors ${
+                                  active
+                                    ? 'bg-orange-50 font-semibold text-orange-600'
+                                    : 'text-slate-600 hover:bg-orange-50 hover:text-orange-600'
+                                }`}
+                              >
+                                {item.name}
+                              </Link>
+                            );
+                          })}
                         </div>
                       )}
 
@@ -325,25 +305,19 @@ export const PublicNavbar = () => {
                   );
                 }
 
-                const isActive =
-                  location.pathname === link.path;
+                const isActive = isLinkActive(link.path);
 
                 return (
                   <Link
                     key={link.path}
                     to={link.path}
                     onClick={closeMobileMenu}
-                    className={`
-                      px-3 py-3
-                      rounded-lg
-                      text-[15px]
-                      font-medium
-                      ${
-                        isActive
-                          ? 'text-orange-600 bg-orange-50'
-                          : 'text-slate-700 hover:bg-orange-50 hover:text-orange-600'
-                      }
-                    `}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`rounded-lg px-3 py-3 font-sans text-[15px] font-medium transition-colors ${
+                      isActive
+                        ? 'bg-orange-50 text-orange-600'
+                        : 'text-slate-700 hover:bg-orange-50 hover:text-orange-600'
+                    }`}
                   >
                     {link.name}
                   </Link>
@@ -351,20 +325,13 @@ export const PublicNavbar = () => {
               })}
 
               {/* Mobile Actions */}
-              <div className="mt-3 pt-3 border-t border-slate-100">
+              <div className="mt-3 border-t border-slate-100 pt-3">
 
                 {!isAuthenticated && (
                   <Link
                     to="/login"
                     onClick={closeMobileMenu}
-                    className="
-                      block
-                      px-3 py-3
-                      text-[15px]
-                      font-semibold
-                      text-slate-700
-                      hover:text-orange-600
-                    "
+                    className="block px-3 py-3 font-sans text-[15px] font-semibold text-slate-700 transition-colors hover:text-orange-600"
                   >
                     Login
                   </Link>
@@ -374,18 +341,7 @@ export const PublicNavbar = () => {
                   <Link
                     to={isOwner ? '/dashboard' : '/billing'}
                     onClick={closeMobileMenu}
-                    className="
-                      flex items-center justify-center gap-2
-                      w-full
-                      h-11
-                      mt-2
-                      rounded-lg
-                      bg-orange-500
-                      hover:bg-orange-600
-                      text-white
-                      text-sm
-                      font-semibold
-                    "
+                    className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-orange-500 font-sans text-sm font-semibold text-white transition-colors hover:bg-orange-600"
                   >
                     {isOwner ? 'Dashboard' : 'Open POS'}
                     <ArrowRight size={17} />
@@ -394,18 +350,7 @@ export const PublicNavbar = () => {
                   <Link
                     to="/register"
                     onClick={closeMobileMenu}
-                    className="
-                      flex items-center justify-center
-                      w-full
-                      h-11
-                      mt-2
-                      rounded-lg
-                      bg-orange-500
-                      hover:bg-orange-600
-                      text-white
-                      text-sm
-                      font-semibold
-                    "
+                    className="mt-2 flex h-11 w-full items-center justify-center rounded-lg bg-orange-500 font-sans text-sm font-semibold text-white transition-colors hover:bg-orange-600"
                   >
                     Start Free
                   </Link>
@@ -423,3 +368,4 @@ export const PublicNavbar = () => {
 };
 
 export default PublicNavbar;
+
