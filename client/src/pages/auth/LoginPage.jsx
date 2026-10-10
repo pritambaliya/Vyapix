@@ -1,14 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  ArrowRight,
-  Lock,
-  Mail,
-  KeyRound,
-  ArrowLeft,
-  CheckCircle2,
-} from 'lucide-react';
-
+import { ArrowRight, Lock, Mail, KeyRound, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import Input from '../../Components/common/Input';
 import Button from '../../Components/common/Button';
 import BrandLogo from '../../Components/common/BrandLogo';
@@ -120,8 +112,7 @@ export const LoginPage = () => {
 
   return (
     <main className="relative flex min-h-screen flex-col overflow-hidden bg-white font-sans">
-
-      {/* Subtle background rectangles */}
+ 
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-20 -top-20 h-72 w-72 rotate-12 border border-orange-100 bg-orange-50/40" />
 
@@ -129,8 +120,7 @@ export const LoginPage = () => {
 
         <div className="absolute -bottom-28 right-[15%] h-72 w-72 rotate-12 border border-orange-100/70" />
       </div>
-
-      {/* Header */}
+ 
       <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8 lg:px-12">
         <Link to="/" aria-label="Vyapix home">
           <BrandLogo size="md" showBadge badgeText="ERP" />

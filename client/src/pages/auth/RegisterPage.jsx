@@ -354,7 +354,6 @@ export const RegisterPage = () => {
                   </div>
                 </section>
 
-                {/* Store information */}
                 <section>
                   <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
                     <Store size={17} className="text-orange-600" />
