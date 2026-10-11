@@ -1,10 +1,35 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import Input from '../../Components/common/Input';
+import { useState, useEffect } from 'react';
 import Button from '../../Components/common/Button';
+import Input from '../../Components/common/Input';
 import { useToast } from '../../context/ToastContext';
 
+function useScrollAnimation() {
+  useEffect(() => {
+    const elements = document.querySelectorAll('.reveal-on-scroll');
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      {
+        threshold: 0.12,
+      }
+    );
+
+    elements.forEach((element) => observer.observe(element));
+
+    return () => observer.disconnect();
+  }, []);
+}
+
 export const ContactUsPage = () => {
+  useScrollAnimation();
+
   const { success, error } = useToast();
 
   const [form, setForm] = useState({
@@ -66,10 +91,10 @@ export const ContactUsPage = () => {
 
     setSubmitting(true);
 
-    // Replace this with your API request when the backend is ready.
     setTimeout(() => {
       setSubmitting(false);
       setSubmitted(true);
+
       success('Thank you! Your message has been submitted.');
 
       setForm({
@@ -85,40 +110,44 @@ export const ContactUsPage = () => {
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
-      {/* Hero Section */}
+
       <section className="relative overflow-hidden border-b border-slate-100">
+
         <div
-          className="absolute inset-0 bg-cover bg-center"
+          className="hero-background absolute inset-0 bg-cover bg-center"
           style={{
-            backgroundImage:
-              "url('../../../public/images/local.png')",
+            backgroundImage: "url('/images/local.png')",
           }}
         />
 
         <div className="absolute inset-0 bg-white/90" />
 
         <div className="relative mx-auto max-w-3xl px-5 py-16 text-center sm:py-20">
-          <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
+
+          <p className="hero-subtitle text-sm font-semibold uppercase tracking-widest text-orange-600">
             Contact Us
           </p>
 
-          <h1 className="mt-4 font-heading text-4xl font-bold text-slate-900 sm:text-5xl">
+          <h1 className="hero-title mt-4 font-heading text-4xl font-bold text-slate-900 sm:text-5xl">
             How can we help you?
           </h1>
 
-          <p className="mt-5 text-base leading-7 text-slate-600">
+          <p className="hero-description mt-5 text-base leading-7 text-slate-600">
             Have questions about Vyapix? Contact us for help with billing,
             inventory or getting started with your business.
           </p>
+
         </div>
       </section>
 
-      {/* Contact Details and Form */}
-      <section className="px-5 py-16 sm:py-20">
+      <section className="reveal-on-scroll px-5 py-16 sm:py-20">
+
         <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-3">
-          {/* Contact Details */}
+
           <div className="space-y-5">
-            <div className="border border-slate-200 bg-white p-5">
+
+            <div className="animate-card border border-slate-200 bg-white p-5">
+
               <h2 className="font-heading font-semibold">
                 Email Support
               </h2>
@@ -129,13 +158,15 @@ export const ContactUsPage = () => {
 
               <a
                 href="mailto:support@vyapix.com"
-                className="mt-3 inline-block text-sm font-medium text-orange-600 hover:text-orange-700"
+                className="mt-3 inline-block text-sm font-medium text-orange-600 transition-colors duration-200 hover:text-orange-700"
               >
                 support@vyapix.com
               </a>
+
             </div>
 
-            <div className="border border-slate-200 bg-white p-5">
+            <div className="animate-card border border-slate-200 bg-white p-5">
+
               <h2 className="font-heading font-semibold">
                 Phone Support
               </h2>
@@ -146,13 +177,15 @@ export const ContactUsPage = () => {
 
               <a
                 href="tel:+919876543210"
-                className="mt-3 inline-block text-sm font-medium text-orange-600 hover:text-orange-700"
+                className="mt-3 inline-block text-sm font-medium text-orange-600 transition-colors duration-200 hover:text-orange-700"
               >
                 +91 98765 43210
               </a>
+
             </div>
 
-            <div className="border border-slate-200 bg-white p-5">
+            <div className="animate-card border border-slate-200 bg-white p-5">
+
               <h2 className="font-heading font-semibold">
                 Support Hours
               </h2>
@@ -164,14 +197,21 @@ export const ContactUsPage = () => {
               <p className="mt-1 text-sm font-medium text-slate-700">
                 9:00 AM – 8:00 PM IST
               </p>
+
             </div>
+
           </div>
 
-          {/* Contact Form */}
-          <div className="contact-container-enter border border-slate-200 bg-white p-5 sm:p-8 lg:col-span-2">
+          <div className="animated-card border border-slate-200 bg-white p-5 sm:p-8 lg:col-span-2">
+
             {submitted ? (
               <div className="py-12 text-center">
-                <h2 className="font-heading text-2xl font-bold text-slate-900">
+
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-50 text-3xl text-orange-600">
+                  ✓
+                </div>
+
+                <h2 className="mt-5 font-heading text-2xl font-bold text-slate-900">
                   Thank you for contacting us!
                 </h2>
 
@@ -182,13 +222,15 @@ export const ContactUsPage = () => {
                 <button
                   type="button"
                   onClick={() => setSubmitted(false)}
-                  className="mt-5 text-sm font-semibold text-orange-600 hover:text-orange-700"
+                  className="animate-button mt-5 text-sm font-semibold text-orange-600 hover:text-orange-700"
                 >
                   Send another message
                 </button>
+
               </div>
             ) : (
               <>
+
                 <h2 className="font-heading text-2xl font-bold text-slate-900">
                   Send us a message
                 </h2>
@@ -198,7 +240,7 @@ export const ContactUsPage = () => {
                 </p>
 
                 <form onSubmit={handleSubmit} className="mt-7 space-y-5">
-                  {/* Name and Email */}
+
                   <div className="grid gap-5 sm:grid-cols-2">
                     <Input
                       label="Your Name"
@@ -207,6 +249,7 @@ export const ContactUsPage = () => {
                       value={form.name}
                       onChange={handleChange}
                       required
+                      className="!bg-white !text-gray-900 placeholder:!text-gray-400"
                     />
 
                     <Input
@@ -217,10 +260,10 @@ export const ContactUsPage = () => {
                       value={form.email}
                       onChange={handleChange}
                       required
+                      className="!bg-white !text-gray-900 placeholder:!text-gray-400"
                     />
                   </div>
 
-                  {/* Phone and Business */}
                   <div className="grid gap-5 sm:grid-cols-2">
                     <Input
                       label="Phone Number"
@@ -229,6 +272,7 @@ export const ContactUsPage = () => {
                       placeholder="Enter phone number"
                       value={form.phone}
                       onChange={handleChange}
+                      className="!bg-white !text-gray-900 placeholder:!text-gray-400"
                     />
 
                     <Input
@@ -237,14 +281,14 @@ export const ContactUsPage = () => {
                       placeholder="Enter business name"
                       value={form.shopName}
                       onChange={handleChange}
+                      className="!bg-white !text-gray-900 placeholder:!text-gray-400"
                     />
                   </div>
 
-                  {/* Category */}
                   <div>
                     <label
                       htmlFor="category"
-                      className="mb-2 block text-sm font-medium text-slate-700"
+                      className="mb-2 block text-sm font-medium text-gray-700"
                     >
                       How can we help?
                     </label>
@@ -254,7 +298,7 @@ export const ContactUsPage = () => {
                       name="category"
                       value={form.category}
                       onChange={handleChange}
-                      className="contact-field h-12 w-full border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                      className="h-12 w-full border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition-colors duration-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                     >
                       <option value="general">General Inquiry</option>
                       <option value="billing">Billing & Invoicing</option>
@@ -265,11 +309,10 @@ export const ContactUsPage = () => {
                     </select>
                   </div>
 
-                  {/* Message */}
                   <div>
                     <label
                       htmlFor="message"
-                      className="mb-2 block text-sm font-medium text-slate-700"
+                      className="mb-2 block text-sm font-medium text-gray-700"
                     >
                       Message <span className="text-red-500">*</span>
                     </label>
@@ -282,7 +325,7 @@ export const ContactUsPage = () => {
                       value={form.message}
                       onChange={handleChange}
                       required
-                      className="contact-field w-full resize-none border border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                      className="w-full resize-none border border-gray-300 bg-white p-3 text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                     />
                   </div>
 
@@ -291,113 +334,102 @@ export const ContactUsPage = () => {
                     variant="primary"
                     size="md"
                     loading={submitting}
-                    className="!rounded-none"
+                    className="animate-button !rounded-none"
                   >
                     Send Message
                   </Button>
+
                 </form>
+
               </>
+
             )}
+
           </div>
+
         </div>
       </section>
+      <section className="reveal-on-scroll border-y border-slate-100 bg-slate-50 py-16 sm:py-20">
 
-      {/* Frequently Asked Questions */}
-      <section className="border-y border-slate-100 bg-slate-50 py-16 sm:py-20">
         <div className="mx-auto max-w-3xl px-5">
           <div className="text-center">
-            <h2 className="font-heading text-3xl font-bold text-slate-900">
+
+            <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
+              Need Help?
+            </p>
+
+            <h2 className="mt-3 font-heading text-3xl font-bold text-slate-900">
               Frequently Asked Questions
             </h2>
 
             <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
               Find answers to common questions about Vyapix.
             </p>
-          </div>
 
+          </div>
           <div className="mt-8 space-y-3">
-            {faqs.map((faq, index) => (
-              <div
-                key={faq.q}
-                className="border border-slate-200 bg-white"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenFaq(openFaq === index ? -1 : index)
-                  }
-                  aria-expanded={openFaq === index}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+
+            {faqs.map((faq, index) => {
+
+              const isOpen = openFaq === index;
+
+              return (
+                <div
+                  key={faq.q}
+                  className="animate-card border border-slate-200 bg-white"
                 >
-                  <span className="text-sm font-semibold text-slate-900 sm:text-base">
-                    {faq.q}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenFaq(isOpen ? -1 : index)
+                    }
+                    aria-expanded={isOpen}
+                    aria-controls={`faq-answer-${index}`}
+                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                  >
 
-                  <span className="text-xl text-orange-600">
-                    {openFaq === index ? '−' : '+'}
-                  </span>
-                </button>
+                    <span className="text-sm font-semibold text-slate-900 sm:text-base">
+                      {faq.q}
+                    </span>
 
-                {openFaq === index && (
-                  <div className="border-t border-slate-100 px-5 py-4 text-sm leading-7 text-slate-600">
-                    {faq.a}
+                    <span
+                      className={`shrink-0 text-xl text-orange-600 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''
+                        }`}
+                      aria-hidden="true"
+                    >
+                      {isOpen ? '−' : '+'}
+                    </span>
+
+                  </button>
+                  <div
+                    id={`faq-answer-${index}`}
+                    className={`faq-answer ${isOpen ? 'is-open' : ''}`}
+                    aria-hidden={!isOpen}
+                    {...(!isOpen ? { inert: true } : {})}
+                  >
+
+                    <div className="faq-answer-inner">
+
+                      <div className="border-t border-slate-100 px-5 py-4 text-sm leading-7 text-slate-600">
+                        {faq.a}
+                      </div>
+
+                    </div>
+
                   </div>
-                )}
-              </div>
-            ))}
+
+                </div>
+              );
+
+            })}
+
           </div>
+
         </div>
       </section>
 
-
-      {/* Input Styling */}
-      <style>{`
-        .contact-container-enter input,
-        .contact-container-enter textarea,
-        .contact-container-enter select {
-          border-radius: 0 !important;
-          background-color: #ffffff !important;
-          color: #111827 !important;
-          border-color: #d1d5db;
-        }
-
-        .contact-container-enter input::placeholder,
-        .contact-container-enter textarea::placeholder {
-          color: #111827 !important;
-          opacity: 1;
-        }
-
-        .contact-container-enter input:focus,
-        .contact-container-enter textarea:focus,
-        .contact-container-enter select:focus {
-          border-color: #f97316 !important;
-          outline: none;
-          box-shadow: 0 0 0 2px rgb(249 115 22 / 12%);
-        }
-
-        .contact-container-enter {
-          animation: contactFormEnter 0.5s ease-out;
-        }
-
-        @keyframes contactFormEnter {
-          from {
-            opacity: 0;
-            transform: translateY(12px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .contact-container-enter {
-            animation: none;
-          }
-        }
-      `}</style>
     </div>
   );
 };
 
-export default ContactUsPage;
+export default ContactUsPage; 

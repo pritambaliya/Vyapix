@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -13,6 +13,8 @@ import {
     ShieldCheck,
     TrendingUp,
 } from 'lucide-react';
+
+
 
 const features = [
     {
@@ -90,6 +92,29 @@ const benefits = [
 ];
 
 const HomePage = () => {
+
+    useEffect(() => {
+        const elements = document.querySelectorAll('.scroll-reveal');
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('show');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            },
+            {
+                threshold: 0.15,
+            }
+        );
+
+        elements.forEach((element) => observer.observe(element));
+
+        return () => observer.disconnect();
+    }, []);
+
     return (
         <>
             {/* ================= SEO METADATA ================= */}
@@ -141,7 +166,7 @@ const HomePage = () => {
                 />
             </Helmet>
 
-            <div className="overflow-hidden bg-white text-slate-900">
+            <div className="page-enter overflow-hidden bg-white text-slate-900">
 
                 {/* ================= HERO SECTION ================= */}
                 <section className="relative isolate overflow-hidden bg-gradient-to-b from-sky-50 via-white to-sky-50">
@@ -163,7 +188,7 @@ const HomePage = () => {
                     {/* Hero Content */}
                     <div className="relative z-10 mx-auto max-w-5xl px-5 pb-0 pt-14 text-center sm:px-6 sm:pt-20 lg:pt-24">
 
-                        <h1 className="font-heading text-4xl font-bold tracking-tight sm:text-6xl">
+                        <h1 className="hero-title font-heading text-4xl font-bold tracking-tight sm:text-6xl">
                             Billing & Business Management
 
                             <span className="mt-5 block text-orange-500">
@@ -171,14 +196,14 @@ const HomePage = () => {
                             </span>
                         </h1>
 
-                        <p className="mx-auto mt-6 max-w-2xl font-sans text-lg leading-8 text-black">
+                        <p className="hero-description mx-auto mt-6 max-w-2xl font-sans text-lg leading-8 text-black">
                             Manage billing, inventory, invoices, and everyday business
                             operations in one place. Vyapix helps simplify your workflow
                             so you can focus on growing your business.
                         </p>
 
                         {/* CTA Buttons */}
-                        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+                        <div className="hero-buttons mt-8 flex flex-col justify-center gap-3 sm:flex-row">
 
                             <Link
                                 to="/register"
@@ -215,7 +240,7 @@ const HomePage = () => {
                         {benefits.map((benefit) => (
                             <article
                                 key={benefit.title}
-                                className="group overflow-hidden border border-slate-100 bg-white transition-all duration-300 hover:border-orange-200 hover:shadow-xl hover:shadow-orange-100/50"
+                                className="scroll-reveal animated-card group overflow-hidden border border-slate-100 bg-white"
                             >
                                 {/* Benefit Image */}
                                 <div className="relative h-48 overflow-hidden bg-orange-50">
@@ -288,7 +313,7 @@ const HomePage = () => {
                                 return (
                                     <article
                                         key={feature.title}
-                                        className="group overflow-hidden border border-slate-200/80 bg-white transition-all duration-300 hover:border-orange-200 hover:shadow-xl hover:shadow-orange-100/60"
+                                        className="scroll-reveal animated-card group overflow-hidden border border-slate-200/80 bg-white"
                                     >
 
                                         {/* Feature Image */}

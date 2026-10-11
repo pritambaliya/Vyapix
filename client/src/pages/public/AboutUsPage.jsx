@@ -1,7 +1,33 @@
 import { Link } from 'react-router-dom';
 import Button from '../../Components/common/Button';
+import { useEffect } from "react";
+
+function useScrollAnimation() {
+  useEffect(() => {
+    const elements = document.querySelectorAll(".reveal-on-scroll");
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      {
+        threshold: 0.12,
+      }
+    );
+
+    elements.forEach((element) => observer.observe(element));
+
+    return () => observer.disconnect();
+  }, []);
+}
 
 export const AboutUsPage = () => {
+  useScrollAnimation();
   const features = [
     {
       title: 'Easy GST Billing',
@@ -50,9 +76,10 @@ export const AboutUsPage = () => {
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
       {/* Hero Section */}
+      {/* Hero Section */}
       <section className="relative overflow-hidden border-b border-slate-100">
         <div
-          className="absolute inset-0 bg-cover bg-center"
+          className="hero-background absolute inset-0 bg-cover bg-center"
           style={{
             backgroundImage:
               "url('https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=2000&q=85')",
@@ -61,30 +88,38 @@ export const AboutUsPage = () => {
 
         <div className="absolute inset-0 bg-white/90" />
 
-        <div className="relative mx-auto max-w-6xl px-5 py-20 text-center sm:py-24">
-          <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
+        <div className="hero-content relative mx-auto max-w-6xl px-5 py-20 text-center sm:py-24">
+          <p className="hero-subtitle text-sm font-semibold uppercase tracking-widest text-orange-600">
             About Vyapix
           </p>
 
-          <h1 className="mt-4 font-heading text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
+          <h1 className="hero-title mt-4 font-heading text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
             Simple Billing.
             <span className="text-orange-500"> Smarter Business.</span>
           </h1>
 
-          <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+          <p className="hero-description mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
             Vyapix helps retailers manage billing, inventory, invoices, and
             daily business activities in one place.
           </p>
 
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
+          <div className="hero-buttons mt-8 flex flex-wrap justify-center gap-4">
             <Link to="/register">
-              <Button variant="primary" size="md" className="!rounded-none">
+              <Button
+                variant="primary"
+                size="md"
+                className="animate-button !rounded-none"
+              >
                 Get Started
               </Button>
             </Link>
 
             <Link to="/contact">
-              <Button variant="secondary" size="md" className="!rounded-none hover:text-black">
+              <Button
+                variant="secondary"
+                size="md"
+                className="animate-button !rounded-none hover:text-black"
+              >
                 Contact Us
               </Button>
             </Link>
@@ -101,7 +136,7 @@ export const AboutUsPage = () => {
             { title: 'Smart', desc: 'Inventory' },
             { title: 'Simple', desc: 'Reports' },
           ].map((item) => (
-            <div key={item.title} className="text-center">
+            <div key={item.title} className="animate-card rounded-lg p-3 text-center">
               <h3 className="font-heading text-2xl font-bold text-slate-900">
                 {item.title}
               </h3>
@@ -113,7 +148,7 @@ export const AboutUsPage = () => {
       </section>
 
       {/* About Vyapix */}
-      <section className="py-16 sm:py-20">
+      <section className="reveal-on-scroll py-16 sm:py-20">
         <div className="mx-auto grid max-w-6xl gap-10 px-5 sm:px-8 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
@@ -165,9 +200,8 @@ export const AboutUsPage = () => {
             ].map((item, index) => (
               <div
                 key={item.title}
-                className={`border border-slate-200 p-6 ${
-                  index === 0 || index === 3 ? 'bg-orange-50' : 'bg-white'
-                }`}
+                className={`animate-card border border-slate-200 p-6 ${index === 0 || index === 3 ? 'bg-orange-50' : 'bg-white'
+                  }`}
               >
                 <h3 className="font-heading text-lg font-semibold text-slate-900">
                   {item.title}
@@ -183,7 +217,7 @@ export const AboutUsPage = () => {
       </section>
 
       {/* Features */}
-      <section className="border-y border-slate-100 bg-slate-50 py-16 sm:py-20">
+      <section className="reveal-on-scroll border-y border-slate-100 bg-slate-50 py-16 sm:py-20">
         <div className="mx-auto max-w-6xl px-5 sm:px-8">
           <div className="text-center">
             <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
@@ -203,7 +237,7 @@ export const AboutUsPage = () => {
             {features.map((feature) => (
               <div
                 key={feature.title}
-                className="border border-slate-200 bg-white p-6 transition hover:border-orange-400"
+                className="animate-card border border-slate-200 bg-white p-6 hover:border-orange-400"
               >
                 <h3 className="font-heading text-lg font-semibold text-slate-900">
                   {feature.title}
@@ -227,7 +261,7 @@ export const AboutUsPage = () => {
       </section>
 
       {/* Business Types */}
-      <section className="py-16 sm:py-20">
+      <section className="reveal-on-scroll py-16 sm:py-20">
         <div className="mx-auto grid max-w-6xl gap-8 px-5 sm:px-8 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
@@ -256,7 +290,7 @@ export const AboutUsPage = () => {
             {businessTypes.map((business) => (
               <div
                 key={business}
-                className="border border-slate-200 bg-white p-4 text-sm font-medium text-slate-700 transition hover:border-orange-400"
+                className="business-card border border-slate-200 bg-white p-4 text-sm font-medium text-slate-700 hover:border-orange-400"
               >
                 {business}
               </div>
@@ -266,7 +300,7 @@ export const AboutUsPage = () => {
       </section>
 
       {/* Benefits */}
-      <section className="border-y border-slate-200 bg-orange-50 py-16 sm:py-20">
+      <section className="reveal-on-scroll border-y border-slate-200 bg-orange-50 py-16 sm:py-20">
         <div className="mx-auto grid max-w-6xl gap-8 px-5 sm:px-8 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
@@ -287,7 +321,7 @@ export const AboutUsPage = () => {
             {benefits.map((benefit) => (
               <div
                 key={benefit}
-                className="border border-orange-100 bg-white p-4 text-sm font-medium text-slate-700"
+                className="animate-card border border-orange-100 bg-white p-4 text-sm font-medium text-slate-700"
               >
                 {benefit}
               </div>
