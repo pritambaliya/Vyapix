@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Button from '../../Components/common/Button';
 import Input from '../../Components/common/Input';
 import { useToast } from '../../context/ToastContext';
+import SEO from '../../Components/common/SEO';
 
 function useScrollAnimation() {
   useEffect(() => {
@@ -109,326 +110,324 @@ export const ContactUsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900">
+    <>
+      <SEO
+        title="Contact Us | Vyapix"
+        description="Contact Vyapix for questions about billing software, inventory management, product features, or business support."
+        path="/contact"
+      />
+      <div className="min-h-screen bg-white font-sans text-slate-900">
 
-      <section className="relative overflow-hidden border-b border-slate-100">
+        <section className="relative overflow-hidden border-b border-slate-100">
 
-        <div
-          className="hero-background absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage: "url('/images/local.png')",
-          }}
-        />
+          <div
+            className="hero-background absolute inset-0 bg-cover bg-center"
+            style={{
+              backgroundImage: "url('/images/local.png')",
+            }}
+          />
 
-        <div className="absolute inset-0 bg-white/90" />
+          <div className="absolute inset-0 bg-white/90" />
 
-        <div className="relative mx-auto max-w-3xl px-5 py-16 text-center sm:py-20">
+          <div className="relative mx-auto max-w-3xl px-5 py-16 text-center sm:py-20">
 
-          <p className="hero-subtitle text-sm font-semibold uppercase tracking-widest text-orange-600">
-            Contact Us
-          </p>
+            <p className="hero-subtitle text-sm font-semibold uppercase tracking-widest text-orange-600">
+              Contact Us
+            </p>
 
-          <h1 className="hero-title mt-4 font-heading text-4xl font-bold text-slate-900 sm:text-5xl">
-            How can we help you?
-          </h1>
+            <h1 className="hero-title mt-4 font-heading text-4xl font-bold text-slate-900 sm:text-5xl">
+              How can we help you?
+            </h1>
 
-          <p className="hero-description mt-5 text-base leading-7 text-slate-600">
-            Have questions about Vyapix? Contact us for help with billing,
-            inventory or getting started with your business.
-          </p>
-
-        </div>
-      </section>
-
-      <section className="reveal-on-scroll px-5 py-16 sm:py-20">
-
-        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-3">
-
-          <div className="space-y-5">
-
-            <div className="animate-card border border-slate-200 bg-white p-5">
-
-              <h2 className="font-heading font-semibold">
-                Email Support
-              </h2>
-
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Send us your questions or feedback.
-              </p>
-
-              <a
-                href="mailto:support@vyapix.com"
-                className="mt-3 inline-block text-sm font-medium text-orange-600 transition-colors duration-200 hover:text-orange-700"
-              >
-                support@vyapix.com
-              </a>
-
-            </div>
-
-            <div className="animate-card border border-slate-200 bg-white p-5">
-
-              <h2 className="font-heading font-semibold">
-                Phone Support
-              </h2>
-
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Contact our support team.
-              </p>
-
-              <a
-                href="tel:+919876543210"
-                className="mt-3 inline-block text-sm font-medium text-orange-600 transition-colors duration-200 hover:text-orange-700"
-              >
-                +91 98765 43210
-              </a>
-
-            </div>
-
-            <div className="animate-card border border-slate-200 bg-white p-5">
-
-              <h2 className="font-heading font-semibold">
-                Support Hours
-              </h2>
-
-              <p className="mt-2 text-sm text-slate-600">
-                Monday – Saturday
-              </p>
-
-              <p className="mt-1 text-sm font-medium text-slate-700">
-                9:00 AM – 8:00 PM IST
-              </p>
-
-            </div>
+            <p className="hero-description mt-5 text-base leading-7 text-slate-600">
+              Have questions about Vyapix? Contact us for help with billing,
+              inventory or getting started with your business.
+            </p>
 
           </div>
+        </section>
 
-          <div className="animated-card border border-slate-200 bg-white p-5 sm:p-8 lg:col-span-2">
+        <section className="reveal-on-scroll px-5 py-16 sm:py-20">
 
-            {submitted ? (
-              <div className="py-12 text-center">
+          <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-3">
 
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-50 text-3xl text-orange-600">
-                  ✓
-                </div>
+            <div className="space-y-5">
 
-                <h2 className="mt-5 font-heading text-2xl font-bold text-slate-900">
-                  Thank you for contacting us!
+              <div className="animate-card border border-slate-200 bg-white p-5">
+
+                <h2 className="font-heading font-semibold">
+                  Email Support
                 </h2>
 
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  Your message has been submitted successfully.
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Send us your questions or feedback.
                 </p>
 
-                <button
-                  type="button"
-                  onClick={() => setSubmitted(false)}
-                  className="animate-button mt-5 text-sm font-semibold text-orange-600 hover:text-orange-700"
+                <a
+                  href="mailto:support@vyapix.com"
+                  className="mt-3 inline-block text-sm font-medium text-orange-600 transition-colors duration-200 hover:text-orange-700"
                 >
-                  Send another message
-                </button>
+                  support@vyapix.com
+                </a>
 
               </div>
-            ) : (
-              <>
 
-                <h2 className="font-heading text-2xl font-bold text-slate-900">
-                  Send us a message
+              <div className="animate-card border border-slate-200 bg-white p-5">
+
+                <h2 className="font-heading font-semibold">
+                  Phone Support
                 </h2>
 
-                <p className="mt-2 text-sm leading-7 text-slate-600">
-                  Fill in the details below and tell us how we can help.
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Contact our support team.
                 </p>
 
-                <form onSubmit={handleSubmit} className="mt-7 space-y-5">
-
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <Input
-                      label="Your Name"
-                      name="name"
-                      placeholder="Enter your name"
-                      value={form.name}
-                      onChange={handleChange}
-                      required
-                      className="!bg-white !text-gray-900 placeholder:!text-gray-400"
-                    />
-
-                    <Input
-                      label="Email Address"
-                      type="email"
-                      name="email"
-                      placeholder="you@example.com"
-                      value={form.email}
-                      onChange={handleChange}
-                      required
-                      className="!bg-white !text-gray-900 placeholder:!text-gray-400"
-                    />
-                  </div>
-
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <Input
-                      label="Phone Number"
-                      name="phone"
-                      type="tel"
-                      placeholder="Enter phone number"
-                      value={form.phone}
-                      onChange={handleChange}
-                      className="!bg-white !text-gray-900 placeholder:!text-gray-400"
-                    />
-
-                    <Input
-                      label="Business Name"
-                      name="shopName"
-                      placeholder="Enter business name"
-                      value={form.shopName}
-                      onChange={handleChange}
-                      className="!bg-white !text-gray-900 placeholder:!text-gray-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="category"
-                      className="mb-2 block text-sm font-medium text-gray-700"
-                    >
-                      How can we help?
-                    </label>
-
-                    <select
-                      id="category"
-                      name="category"
-                      value={form.category}
-                      onChange={handleChange}
-                      className="h-12 w-full border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition-colors duration-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-                    >
-                      <option value="general">General Inquiry</option>
-                      <option value="billing">Billing & Invoicing</option>
-                      <option value="inventory">Inventory Management</option>
-                      <option value="hardware">Printer & Barcode Scanner</option>
-                      <option value="account">Account & Login</option>
-                      <option value="technical">Technical Support</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="message"
-                      className="mb-2 block text-sm font-medium text-gray-700"
-                    >
-                      Message <span className="text-red-500">*</span>
-                    </label>
-
-                    <textarea
-                      id="message"
-                      name="message"
-                      rows={5}
-                      placeholder="Write your message here..."
-                      value={form.message}
-                      onChange={handleChange}
-                      required
-                      className="w-full resize-none border border-gray-300 bg-white p-3 text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="md"
-                    loading={submitting}
-                    className="animate-button !rounded-none"
-                  >
-                    Send Message
-                  </Button>
-
-                </form>
-
-              </>
-
-            )}
-
-          </div>
-
-        </div>
-      </section>
-      <section className="reveal-on-scroll border-y border-slate-100 bg-slate-50 py-16 sm:py-20">
-
-        <div className="mx-auto max-w-3xl px-5">
-          <div className="text-center">
-
-            <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
-              Need Help?
-            </p>
-
-            <h2 className="mt-3 font-heading text-3xl font-bold text-slate-900">
-              Frequently Asked Questions
-            </h2>
-
-            <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
-              Find answers to common questions about Vyapix.
-            </p>
-
-          </div>
-          <div className="mt-8 space-y-3">
-
-            {faqs.map((faq, index) => {
-
-              const isOpen = openFaq === index;
-
-              return (
-                <div
-                  key={faq.q}
-                  className="animate-card border border-slate-200 bg-white"
+                <a
+                  href="tel:+919876543210"
+                  className="mt-3 inline-block text-sm font-medium text-orange-600 transition-colors duration-200 hover:text-orange-700"
                 >
+                  +91 98765 43210
+                </a>
+
+              </div>
+
+              <div className="animate-card border border-slate-200 bg-white p-5">
+
+                <h2 className="font-heading font-semibold">
+                  Support Hours
+                </h2>
+
+                <p className="mt-2 text-sm text-slate-600">
+                  Monday – Saturday
+                </p>
+
+                <p className="mt-1 text-sm font-medium text-slate-700">
+                  9:00 AM – 8:00 PM IST
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="animated-card border border-slate-200 bg-white p-5 sm:p-8 lg:col-span-2">
+
+              {submitted ? (
+                <div className="py-12 text-center">
+
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-50 text-3xl text-orange-600">
+                    ✓
+                  </div>
+
+                  <h2 className="mt-5 font-heading text-2xl font-bold text-slate-900">
+                    Thank you for contacting us!
+                  </h2>
+
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    Your message has been submitted successfully.
+                  </p>
+
                   <button
                     type="button"
-                    onClick={() =>
-                      setOpenFaq(isOpen ? -1 : index)
-                    }
-                    aria-expanded={isOpen}
-                    aria-controls={`faq-answer-${index}`}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                    onClick={() => setSubmitted(false)}
+                    className="animate-button mt-5 text-sm font-semibold text-orange-600 hover:text-orange-700"
                   >
-
-                    <span className="text-sm font-semibold text-slate-900 sm:text-base">
-                      {faq.q}
-                    </span>
-
-                    <span
-                      className={`shrink-0 text-xl text-orange-600 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''
-                        }`}
-                      aria-hidden="true"
-                    >
-                      {isOpen ? '−' : '+'}
-                    </span>
-
+                    Send another message
                   </button>
-                  <div
-                    id={`faq-answer-${index}`}
-                    className={`faq-answer ${isOpen ? 'is-open' : ''}`}
-                    aria-hidden={!isOpen}
-                    {...(!isOpen ? { inert: true } : {})}
-                  >
-
-                    <div className="faq-answer-inner">
-
-                      <div className="border-t border-slate-100 px-5 py-4 text-sm leading-7 text-slate-600">
-                        {faq.a}
-                      </div>
-
-                    </div>
-
-                  </div>
 
                 </div>
-              );
+              ) : (
+                <>
 
-            })}
+                  <h2 className="font-heading text-2xl font-bold text-slate-900">
+                    Send us a message
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-7 text-slate-600">
+                    Fill in the details below and tell us how we can help.
+                  </p>
+
+                  <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <Input
+                        label="Your Name"
+                        name="name"
+                        placeholder="Enter your name"
+                        value={form.name}
+                        onChange={handleChange}
+                        required
+                        className="!bg-white !text-gray-900 placeholder:!text-gray-400"
+                      />
+
+                      <Input
+                        label="Email Address"
+                        type="email"
+                        name="email"
+                        placeholder="you@example.com"
+                        value={form.email}
+                        onChange={handleChange}
+                        required
+                        className="!bg-white !text-gray-900 placeholder:!text-gray-400"
+                      />
+                    </div>
+
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <Input
+                        label="Phone Number"
+                        name="phone"
+                        type="tel"
+                        placeholder="Enter phone number"
+                        value={form.phone}
+                        onChange={handleChange}
+                        className="!bg-white !text-gray-900 placeholder:!text-gray-400"
+                      />
+
+                      <Input
+                        label="Business Name"
+                        name="shopName"
+                        placeholder="Enter business name"
+                        value={form.shopName}
+                        onChange={handleChange}
+                        className="!bg-white !text-gray-900 placeholder:!text-gray-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="category"
+                        className="mb-2 block text-sm font-medium text-gray-700"
+                      >
+                        How can we help?
+                      </label>
+
+                      <select
+                        id="category"
+                        name="category"
+                        value={form.category}
+                        onChange={handleChange}
+                        className="h-12 w-full border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition-colors duration-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                      >
+                        <option value="general">General Inquiry</option>
+                        <option value="billing">Billing & Invoicing</option>
+                        <option value="inventory">Inventory Management</option>
+                        <option value="hardware">Printer & Barcode Scanner</option>
+                        <option value="account">Account & Login</option>
+                        <option value="technical">Technical Support</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="message"
+                        className="mb-2 block text-sm font-medium text-gray-700"
+                      >
+                        Message <span className="text-red-500">*</span>
+                      </label>
+
+                      <textarea
+                        id="message"
+                        name="message"
+                        rows={5}
+                        placeholder="Write your message here..."
+                        value={form.message}
+                        onChange={handleChange}
+                        required
+                        className="w-full resize-none border border-gray-300 bg-white p-3 text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="md"
+                      loading={submitting}
+                      className="animate-button !rounded-none"
+                    >
+                      Send Message
+                    </Button>
+
+                  </form>
+
+                </>
+
+              )}
+
+            </div>
 
           </div>
+        </section>
+        <section className="reveal-on-scroll border-y border-slate-100 bg-slate-50 py-16 sm:py-20">
 
-        </div>
-      </section>
+          <div className="mx-auto max-w-3xl px-5">
+            <div className="text-center">
 
-    </div>
+              <p className="text-sm font-semibold uppercase tracking-widest text-orange-600">
+                Need Help?
+              </p>
+
+              <h2 className="mt-3 font-heading text-3xl font-bold text-slate-900">
+                Frequently Asked Questions
+              </h2>
+
+              <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+                Find answers to common questions about Vyapix.
+              </p>
+
+            </div>
+            <div className="mt-8 space-y-3">
+
+              {faqs.map((faq, index) => {
+                const isOpen = openFaq === index;
+
+                return (
+                  <div
+                    key={faq.q}
+                    className="animate-card border border-slate-200 bg-white"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaq(isOpen ? -1 : index)}
+                      aria-expanded={isOpen}
+                      aria-controls={`faq-answer-${index}`}
+                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors duration-200 hover:bg-orange-50/50"
+                    >
+                      <span className="text-sm font-semibold text-slate-900 sm:text-base">
+                        {faq.q}
+                      </span>
+
+                      <span
+                        className={`shrink-0 text-xl text-orange-600 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''
+                          }`}
+                        aria-hidden="true"
+                      >
+                        {isOpen ? '−' : '+'}
+                      </span>
+                    </button>
+
+                    <div
+                      id={`faq-answer-${index}`}
+                      aria-hidden={!isOpen}
+                      className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                        }`}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="border-t border-slate-100 px-5 py-4 text-sm leading-7 text-slate-600">
+                          {faq.a}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+    </>
   );
 };
 

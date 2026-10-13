@@ -13,6 +13,7 @@ import RegisterPage from "../pages/auth/RegisterPage";
 import FeatureDetails from "../pages/feature/FeatureDetails";
 import SolutionDetails from "../pages/solution/SolutionDetails";
 import PricingPage from "../pages/pricing/PricingPage";
+import DashboardPage from "../pages/dashboard/DashboardPage";
 
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, role, loading } = useAuth();
@@ -99,7 +100,7 @@ const AppRoutes = () => {
         path="/dashboard"
         element={
           <ProtectedRoute allowedRoles={["owner"]}>
-            <div>Owner Dashboard</div>
+            <DashboardPage />
           </ProtectedRoute>
         }
       />

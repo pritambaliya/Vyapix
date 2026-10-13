@@ -1,20 +1,7 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
-import {
-    ArrowRight,
-    FileText,
-    Package,
-    ShoppingCart,
-    BarChart3,
-    Receipt,
-    Users,
-    Zap,
-    ShieldCheck,
-    TrendingUp,
-} from 'lucide-react';
-
-
+import { ArrowRight, FileText, Package, ShoppingCart, BarChart3, Receipt, Users, Zap, ShieldCheck, TrendingUp } from 'lucide-react';
+import SEO from '../../Components/common/SEO';
 
 const features = [
     {
@@ -117,75 +104,26 @@ const HomePage = () => {
 
     return (
         <>
-            {/* ================= SEO METADATA ================= */}
-            <Helmet>
-                <title>
-                    Vyapix | GST Billing, Inventory & Business Management Software
-                </title>
-
-                <meta
-                    name="description"
-                    content="Simplify GST billing, invoice generation, inventory management, POS billing, and sales reporting with Vyapix business management software."
-                />
-
-                <meta
-                    name="robots"
-                    content="index, follow"
-                />
-
-                <meta
-                    property="og:title"
-                    content="Vyapix | Billing & Business Management Made Simple"
-                />
-
-                <meta
-                    property="og:description"
-                    content="Manage billing, inventory, invoices, and everyday business operations in one place with Vyapix."
-                />
-
-                <meta
-                    property="og:type"
-                    content="website"
-                />
-
-                {/* Replace this URL with your actual production domain */}
-                <meta
-                    property="og:url"
-                    content="https://YOUR-DOMAIN.com/"
-                />
-
-                <meta
-                    property="og:image"
-                    content="https://YOUR-DOMAIN.com/images/vyapix-retail-banner.png"
-                />
-
-                {/* Replace this URL with your actual production domain */}
-                <link
-                    rel="canonical"
-                    href="https://YOUR-DOMAIN.com/"
-                />
-            </Helmet>
+            <SEO title="Vyapix | GST Billing, Inventory & Business Management Software"
+                description="Simplify GST billing, invoice generation, inventory management, POS billing, and sales reporting with Vyapix business management software."
+                path="/" />
 
             <div className="page-enter overflow-hidden bg-white text-slate-900">
 
-                {/* ================= HERO SECTION ================= */}
                 <section className="relative isolate overflow-hidden bg-gradient-to-b from-sky-50 via-white to-sky-50">
 
-                    {/* Background Image */}
-                    <div className="absolute inset-0 -z-10">
+                    <div className="absolute inset-0 -z-10 overflow-hidden">
                         <img
                             src="/images/vyapix-retail-banner.png"
                             alt=""
                             aria-hidden="true"
                             fetchPriority="high"
-                            className="absolute inset-0 h-full w-full object-cover object-bottom"
+                            className="absolute inset-0 h-full w-full scale-110 object-cover object-[center_65%]"
                         />
 
-                        {/* White Overlay */}
                         <div className="absolute inset-0 bg-gradient-to-b from-white/95 via-white/75 to-sky-50/10" />
                     </div>
 
-                    {/* Hero Content */}
                     <div className="relative z-10 mx-auto max-w-5xl px-5 pb-0 pt-14 text-center sm:px-6 sm:pt-20 lg:pt-24">
 
                         <h1 className="hero-title font-heading text-4xl font-bold tracking-tight sm:text-6xl">
@@ -202,9 +140,7 @@ const HomePage = () => {
                             so you can focus on growing your business.
                         </p>
 
-                        {/* CTA Buttons */}
                         <div className="hero-buttons mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-
                             <Link
                                 to="/register"
                                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-orange-500 px-7 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-orange-600"
@@ -223,14 +159,12 @@ const HomePage = () => {
                         </div>
                     </div>
 
-                    {/* Bottom Image Area */}
                     <div className="relative z-10 mt-8 h-[180px] w-full sm:mt-0 sm:h-[260px] md:h-[340px] lg:h-[240px]">
                         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-sky-50/10" />
                     </div>
 
                 </section>
 
-                {/* ================= BUSINESS BENEFITS ================= */}
                 <section
                     aria-labelledby="benefits-heading"
                     className="border-y border-slate-100 bg-white"
@@ -253,7 +187,6 @@ const HomePage = () => {
                                     />
                                 </div>
 
-                                {/* Benefit Content */}
                                 <div className="p-6">
                                     <h2
                                         id={
@@ -276,14 +209,12 @@ const HomePage = () => {
                     </div>
                 </section>
 
-                {/* ================= FEATURES SECTION ================= */}
                 <section
                     aria-labelledby="features-heading"
                     className="bg-slate-50 py-16 sm:py-20 lg:py-24"
                 >
                     <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
 
-                        {/* Section Heading */}
                         <div className="mx-auto max-w-2xl text-center">
 
                             <span className="font-sans text-xs font-bold uppercase tracking-[0.2em] text-orange-600 sm:text-sm">
@@ -304,7 +235,6 @@ const HomePage = () => {
 
                         </div>
 
-                        {/* Feature Cards */}
                         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3">
 
                             {features.map((feature) => {
@@ -315,8 +245,6 @@ const HomePage = () => {
                                         key={feature.title}
                                         className="scroll-reveal animated-card group overflow-hidden border border-slate-200/80 bg-white"
                                     >
-
-                                        {/* Feature Image */}
                                         <div className="relative h-48 overflow-hidden bg-orange-50 sm:h-52">
 
                                             <img
@@ -331,9 +259,7 @@ const HomePage = () => {
 
                                         </div>
 
-                                        {/* Feature Content */}
                                         <div className="p-6 sm:p-7">
-
                                             <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
                                                 <Icon size={22} aria-hidden="true" />
                                             </div>
@@ -347,7 +273,6 @@ const HomePage = () => {
                                             </p>
 
                                             <div className="mt-5 h-1 w-10 rounded-full bg-orange-200 transition-all duration-300 group-hover:w-16 group-hover:bg-orange-500" />
-
                                         </div>
                                     </article>
                                 );
@@ -355,7 +280,6 @@ const HomePage = () => {
 
                         </div>
 
-                        {/* Learn More Button */}
                         <div className="mt-12 text-center">
 
                             <Link
