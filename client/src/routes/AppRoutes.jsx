@@ -14,6 +14,7 @@ import FeatureDetails from "../pages/feature/FeatureDetails";
 import SolutionDetails from "../pages/solution/SolutionDetails";
 import PricingPage from "../pages/pricing/PricingPage";
 import DashboardPage from "../pages/dashboard/DashboardPage";
+import AppLayout from "../Components/layout/AppLayout";
 
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, role, loading } = useAuth();
@@ -96,23 +97,13 @@ const AppRoutes = () => {
 
       <Route path="/pricing" element={<PricingPage />} />
 
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute allowedRoles={["owner"]}>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
 
-      <Route
-        path="/billing"
-        element={
-          <ProtectedRoute allowedRoles={["billing"]}>
-            <div>Cashier Billing</div>
-          </ProtectedRoute>
-        }
-      />
+      <Route element={<AppLayout />}>
+        <Route path="/dashboard" element={<ProtectedRoute allowedRoles={["owner"]}> <DashboardPage /> </ProtectedRoute>} />
+      </Route>
+
+
+      <Route path="/billing" element={<ProtectedRoute allowedRoles={["billing"]}> <div>Cashier Billing</div> </ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

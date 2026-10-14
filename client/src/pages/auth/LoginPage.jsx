@@ -26,6 +26,7 @@ export const LoginPage = () => {
 
   const handleOwnerSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
 
     const errs = {};
 
@@ -45,6 +46,8 @@ export const LoginPage = () => {
     setLoading(true);
     setErrors({});
 
+    const startTime = Date.now();
+
     try {
       const res = await loginOwner(ownerEmail.trim(), ownerPassword);
 
@@ -59,6 +62,15 @@ export const LoginPage = () => {
       error(message);
       setErrors({ form: message });
     } finally {
+      const elapsedTime = Date.now() - startTime;
+      const minimumLoadingTime = 2000;
+
+      if (elapsedTime < minimumLoadingTime) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, minimumLoadingTime - elapsedTime)
+        );
+      }
+
       setLoading(false);
     }
   };
@@ -119,6 +131,40 @@ export const LoginPage = () => {
         path="/login"
         noIndex
       />
+
+      {loading && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/80 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-label="Signing in"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-orange-100" />
+
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-orange-500 border-r-orange-500" />
+
+              <div className="h-7 w-7 rounded-full bg-orange-500" />
+            </div>
+
+            <div className="text-center">
+              <p className="text-base font-semibold text-slate-900">
+                Signing you in
+              </p>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Please wait while we securely access your account...
+              </p>
+            </div>
+
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-600">
+              VYAPIX
+            </span>
+          </div>
+        </div>
+      )}
+
       <main className="relative flex min-h-screen flex-col overflow-hidden bg-white font-sans">
 
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -224,8 +270,8 @@ export const LoginPage = () => {
                     type="button"
                     onClick={() => changeTab('owner')}
                     className={`border-b-2 px-3 py-3 text-sm font-semibold transition-colors ${activeTab === 'owner'
-                        ? 'border-orange-500 bg-orange-50/60 text-orange-700'
-                        : 'border-transparent text-slate-600 hover:bg-slate-50'
+                      ? 'border-orange-500 bg-orange-50/60 text-orange-700'
+                      : 'border-transparent text-slate-600 hover:bg-slate-50'
                       }`}
                   >
                     Store Owner
@@ -235,8 +281,8 @@ export const LoginPage = () => {
                     type="button"
                     onClick={() => changeTab('billing')}
                     className={`border-b-2 px-3 py-3 text-sm font-semibold transition-colors ${activeTab === 'billing'
-                        ? 'border-orange-500 bg-orange-50/60 text-orange-700'
-                        : 'border-transparent text-slate-600 hover:bg-slate-50'
+                      ? 'border-orange-500 bg-orange-50/60 text-orange-700'
+                      : 'border-transparent text-slate-600 hover:bg-slate-50'
                       }`}
                   >
                     Cashier

@@ -1,18 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   TrendingUp,
   ShoppingCart,
   Package,
   AlertTriangle,
-  ArrowUpRight,
   Plus,
   FileText,
-  Clock,
   ChevronRight,
-  ShieldCheck,
-  UserCheck,
 } from 'lucide-react';
+
 import {
   AreaChart,
   Area,
@@ -24,22 +21,31 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+
 import Card from '../../Components/common/Card';
 import Button from '../../Components/common/Button';
 import Badge from '../../Components/common/Badge';
 import { CardSkeleton } from '../../Components/common/Skeleton';
+
 import billingService from '../../services/billingService';
 import productService from '../../services/productService';
 import accountService from '../../services/accountService';
-import { formatCurrency, formatDateTime } from '../../utils/formatters';
-import { useAuth } from '../../context/AuthContext'; 
+
+import {
+  formatCurrency,
+  formatDateTime,
+} from '../../utils/formatters';
+
+import { useAuth } from '../../context/AuthContext';
+
+const PIE_COLORS = ['#059669', '#4F46E5', '#D97706', '#E11D48'];
 
 export const DashboardPage = () => {
-  const { user, shop, isOwner } = useAuth();
-  const { isDark } = useTheme();
+  const { shop, isOwner } = useAuth();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
+
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalBills: 0,
@@ -52,13 +58,12 @@ export const DashboardPage = () => {
   const [salesTrend, setSalesTrend] = useState([]);
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
   const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     setLoading(true);
+    setError('');
+
     try {
       // 1. Fetch Bills
       const billsRes = isOwner
@@ -66,110 +71,151 @@ export const DashboardPage = () => {
         : await billingService.getBillingBills({ limit: 50 });
 
       const bills = billsRes.data?.bills || [];
-      const totalBillsCount = billsRes.data?.pagination?.total || bills.length;
+
+      const totalBillsCount =
+        billsRes.data?.pagination?.total ?? bills.length;
 
       let revenueSum = 0;
-      const paymentMap = { cash: 0, upi: 0, card: 0, mixed: 0 };
+
+      const paymentMap = {
+        cash: 0,
+        upi: 0,
+        card: 0,
+        mixed: 0,
+      };
+
       const dateMap = {};
 
       bills.forEach((bill) => {
-        if (bill.status !== 'refunded') {
-          revenueSum += Number(bill.grandTotal || 0);
+        if (bill.status === 'refunded') return;
 
-          const method = (bill.paymentMethod || 'cash').toLowerCase();
-          paymentMap[method] = (paymentMap[method] || 0) + Number(bill.grandTotal || 0);
+        const amount = Number(bill.grandTotal || 0);
 
-          const dateKey = new Date(bill.createdAt).toLocaleDateString('en-IN', {
-            day: 'numeric',
-            month: 'short',
-          });
-          dateMap[dateKey] = (dateMap[dateKey] || 0) + Number(bill.grandTotal || 0);
+        revenueSum += amount;
+
+        const method = String(
+          bill.paymentMethod || 'cash'
+        ).toLowerCase();
+
+        paymentMap[method] = (paymentMap[method] || 0) + amount;
+
+        if (bill.createdAt) {
+          const date = new Date(bill.createdAt);
+
+          if (!Number.isNaN(date.getTime())) {
+            const dateKey = date.toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+            });
+
+            dateMap[dateKey] = (dateMap[dateKey] || 0) + amount;
+          }
         }
       });
 
-      // Sales Trend
-      const trendData = Object.keys(dateMap)
-        .reverse()
-        .slice(-7)
-        .map((date) => ({
+      // 2. Sales Trend
+      // Sort bills by date before building the daily sales chart.
+      const trendData = Object.entries(dateMap)
+        .map(([date, sales]) => ({
           date,
-          sales: Math.round(dateMap[date]),
-        }));
+          sales: Math.round(sales),
+        }))
+        .slice(-7);
 
-      // Payment Breakdown
+      // 3. Payment Breakdown
       const pieData = Object.entries(paymentMap)
-        .filter(([_, val]) => val > 0)
+        .filter(([, value]) => value > 0)
         .map(([name, value]) => ({
           name: name.toUpperCase(),
           value: Math.round(value),
         }));
 
-      // 2. Fetch Products
+      // 4. Fetch Products
       let products = [];
-      let totalProds = 0;
+      let totalProducts = 0;
       let lowStockItems = [];
 
       try {
-        const prodRes = isOwner
+        const productsRes = isOwner
           ? await productService.getOwnerProducts({ limit: 100 })
           : await productService.getBillingProducts({ limit: 100 });
 
-        products = prodRes.data?.products || [];
-        totalProds = prodRes.data?.pagination?.total || products.length;
+        products = productsRes.data?.products || [];
 
-        lowStockItems = products.filter(
-          (p) => p.stock <= (p.lowStockLimit !== undefined ? p.lowStockLimit : 5)
-        );
-      } catch {
-        // Handled
+        totalProducts =
+          productsRes.data?.pagination?.total ?? products.length;
+
+        lowStockItems = products.filter((product) => {
+          const stock = Number(product.stock ?? 0);
+          const stockLimit = Number(product.lowStockLimit ?? 5);
+
+          return stock <= stockLimit;
+        });
+      } catch (productError) {
+        console.error('Failed to load products:', productError);
       }
 
-      // 3. Fetch Activities
+      // 5. Fetch Activities (Owner Only)
       let activities = [];
+
       if (isOwner) {
         try {
-          const actRes = await accountService.getAllActivities();
-          activities = actRes.data?.activities?.slice(0, 5) || [];
-        } catch {
-          // Handled
+          const activitiesRes =
+            await accountService.getAllActivities();
+
+          activities =
+            activitiesRes.data?.activities?.slice(0, 5) || [];
+        } catch (activityError) {
+          console.error('Failed to load activities:', activityError);
         }
       }
 
+      // 6. Update Dashboard State
       setStats({
         totalRevenue: revenueSum,
         totalBills: totalBillsCount,
-        totalProducts: totalProds,
+        totalProducts,
         lowStockCount: lowStockItems.length,
       });
 
       setRecentBills(bills.slice(0, 6));
       setRecentActivities(activities);
-      setSalesTrend(trendData.length > 0 ? trendData : [{ date: 'Today', sales: revenueSum }]);
+
+      setSalesTrend(
+        trendData.length > 0
+          ? trendData
+          : [{ date: 'Today', sales: 0 }]
+      );
+
       setPaymentBreakdown(pieData);
       setLowStockProducts(lowStockItems.slice(0, 5));
-    } catch {
-      // Handled
+    } catch (dashboardError) {
+      console.error('Failed to load dashboard:', dashboardError);
+      setError('Unable to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [isOwner]);
 
-  const PIE_COLORS = ['#059669', '#4F46E5', '#D97706', '#E11D48'];
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   return (
-    <div className="space-y-6">
-      {/* Top Header & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1 border-b border-slate-200 dark:border-slate-800">
+    <div className="min-h-full space-y-6 bg-white text-slate-900">
+      {/* Dashboard Header */}
+      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
             {shop?.shopName || 'Store'} Overview
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Operational summary, real-time revenue metrics, and inventory alerts
+
+          <p className="mt-1 text-xs text-slate-500">
+            Operational summary, revenue metrics, and inventory alerts
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
             size="sm"
@@ -192,102 +238,140 @@ export const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Structured KPI Metric Cards */}
+      {/* Error Message */}
+      {error && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-sm text-rose-700">{error}</p>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={fetchDashboardData}
+          >
+            Try Again
+          </Button>
+        </div>
+      )}
+
+      {/* KPI Cards */}
       {loading ? (
         <CardSkeleton count={4} />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* KPI 1: Revenue */}
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Total Revenue */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Total Revenue
               </span>
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center">
-                <TrendingUp className="w-4 h-4" />
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                <TrendingUp className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-2">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+
+            <div className="mt-4">
+              <h2 className="text-2xl font-bold text-slate-900">
                 {formatCurrency(stats.totalRevenue)}
               </h2>
-              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5 font-medium">
-                Live cumulative sales
+
+              <p className="mt-1 text-[11px] font-medium text-emerald-600">
+                Revenue from loaded bills
               </p>
             </div>
           </div>
 
-          {/* KPI 2: Bills */}
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
+          {/* Total Invoices */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Total Invoices
               </span>
-              <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center">
-                <FileText className="w-4 h-4" />
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                <FileText className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-2">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+
+            <div className="mt-4">
+              <h2 className="text-2xl font-bold text-slate-900">
                 {stats.totalBills}
               </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Completed customer bills
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Customer bills
               </p>
             </div>
           </div>
 
-          {/* KPI 3: Products */}
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
+          {/* Total Products */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Active Catalog
               </span>
-              <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center">
-                <Package className="w-4 h-4" />
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+                <Package className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-2">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+
+            <div className="mt-4">
+              <h2 className="text-2xl font-bold text-slate-900">
                 {stats.totalProducts}
               </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Managed inventory SKUs
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Products in inventory
               </p>
             </div>
           </div>
 
-          {/* KPI 4: Low Stock Alert */}
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
+          {/* Low Stock */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Low Stock Items
               </span>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                stats.lowStockCount > 0
-                  ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-              }`}>
-                <AlertTriangle className="w-4 h-4" />
+
+              <div
+                className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                  stats.lowStockCount > 0
+                    ? 'bg-rose-50 text-rose-600'
+                    : 'bg-slate-100 text-slate-500'
+                }`}
+              >
+                <AlertTriangle className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-2">
-              <h2 className={`text-2xl font-bold ${
-                stats.lowStockCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'
-              }`}>
+
+            <div className="mt-4">
+              <h2
+                className={`text-2xl font-bold ${
+                  stats.lowStockCount > 0
+                    ? 'text-rose-600'
+                    : 'text-slate-900'
+                }`}
+              >
                 {stats.lowStockCount}
               </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                {stats.lowStockCount > 0 ? 'Requires replenishment' : 'All stock levels healthy'}
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                {stats.lowStockCount > 0
+                  ? 'Requires replenishment'
+                  : 'All stock levels healthy'}
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Analytics Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Sales Performance Trend */}
+      {/* Analytics Charts */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Sales Performance */}
         <Card
           className="lg:col-span-2"
           title="Sales Performance"
@@ -295,40 +379,62 @@ export const DashboardPage = () => {
         >
           <div className="h-64 w-full pt-2">
             {salesTrend.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">
+              <div className="flex h-full items-center justify-center text-xs text-slate-400">
                 No recent transaction data to graph
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={salesTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart
+                  data={salesTrend}
+                  margin={{
+                    top: 10,
+                    right: 10,
+                    left: -20,
+                    bottom: 0,
+                  }}
+                >
                   <XAxis
                     dataKey="date"
-                    stroke={isDark ? '#64748B' : '#94A3B8'}
+                    stroke="#94A3B8"
                     fontSize={11}
                     tickLine={false}
+                    axisLine={{ stroke: '#E2E8F0' }}
                   />
+
                   <YAxis
-                    stroke={isDark ? '#64748B' : '#94A3B8'}
+                    stroke="#94A3B8"
                     fontSize={11}
                     tickLine={false}
-                    tickFormatter={(v) => `₹${v}`}
+                    axisLine={false}
+                    tickFormatter={(value) => `₹${value}`}
                   />
+
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
-                      borderColor: isDark ? '#334155' : '#E2E8F0',
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#E2E8F0',
                       borderRadius: '8px',
                       fontSize: '12px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      color: '#0F172A',
+                      boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
                     }}
-                    formatter={(value) => [`₹${value}`, 'Revenue']}
+                    formatter={(value) => [
+                      formatCurrency(Number(value)),
+                      'Revenue',
+                    ]}
                   />
+
                   <Area
                     type="monotone"
                     dataKey="sales"
                     stroke="#059669"
                     strokeWidth={2}
-                    fill={isDark ? 'rgba(5, 150, 105, 0.15)' : 'rgba(5, 150, 105, 0.1)'}
+                    fill="rgba(5, 150, 105, 0.10)"
+                    activeDot={{
+                      r: 5,
+                      stroke: '#059669',
+                      fill: '#FFFFFF',
+                    }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -336,14 +442,14 @@ export const DashboardPage = () => {
           </div>
         </Card>
 
-        {/* Payment Channels Breakdown */}
+        {/* Payment Breakdown */}
         <Card
           title="Payment Channels"
-          subtitle="Revenue distribution by payment mode"
+          subtitle="Revenue by payment mode"
         >
-          <div className="h-64 w-full flex flex-col items-center justify-center">
+          <div className="flex h-64 w-full flex-col items-center justify-center">
             {paymentBreakdown.length === 0 ? (
-              <div className="text-center text-xs text-slate-400 py-10">
+              <div className="py-10 text-center text-xs text-slate-400">
                 No payment data available
               </div>
             ) : (
@@ -365,14 +471,19 @@ export const DashboardPage = () => {
                       />
                     ))}
                   </Pie>
+
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
-                      borderColor: isDark ? '#334155' : '#E2E8F0',
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#E2E8F0',
                       borderRadius: '8px',
                       fontSize: '12px',
+                      color: '#0F172A',
                     }}
-                    formatter={(value) => [`₹${value}`, 'Amount']}
+                    formatter={(value) => [
+                      formatCurrency(Number(value)),
+                      'Amount',
+                    ]}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -380,13 +491,20 @@ export const DashboardPage = () => {
 
             {paymentBreakdown.length > 0 && (
               <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
-                {paymentBreakdown.map((p, idx) => (
-                  <div key={p.name} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                {paymentBreakdown.map((payment, index) => (
+                  <div
+                    key={payment.name}
+                    className="flex items-center gap-1.5 text-xs text-slate-600"
+                  >
                     <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
+                      className="h-2 w-2 rounded-full"
+                      style={{
+                        backgroundColor:
+                          PIE_COLORS[index % PIE_COLORS.length],
+                      }}
                     />
-                    <span className="font-medium">{p.name}</span>
+
+                    <span className="font-medium">{payment.name}</span>
                   </div>
                 ))}
               </div>
@@ -395,9 +513,9 @@ export const DashboardPage = () => {
         </Card>
       </div>
 
-      {/* Tables Section: Recent Invoices & Low Stock Watchlist */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Recent Invoices Table */}
+      {/* Recent Transactions and Inventory */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Recent Transactions */}
         <Card
           className="lg:col-span-2"
           title="Recent Transactions"
@@ -405,53 +523,62 @@ export const DashboardPage = () => {
           headerAction={
             <Link
               to="/invoices"
-              className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
             >
               View Invoices
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           }
         >
           {recentBills.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 text-xs">
+            <div className="py-8 text-center text-xs text-slate-400">
               No recent transactions recorded. Open POS to start billing.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 text-[11px]">
-                    <th className="pb-2 font-semibold">Invoice #</th>
-                    <th className="pb-2 font-semibold">Customer</th>
-                    <th className="pb-2 font-semibold">Method</th>
-                    <th className="pb-2 font-semibold">Amount</th>
-                    <th className="pb-2 font-semibold text-right">Status</th>
+                  <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th className="pb-3 font-semibold">Invoice #</th>
+                    <th className="pb-3 font-semibold">Customer</th>
+                    <th className="pb-3 font-semibold">Method</th>
+                    <th className="pb-3 font-semibold">Amount</th>
+                    <th className="pb-3 text-right font-semibold">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+
+                <tbody className="divide-y divide-slate-100">
                   {recentBills.map((bill) => (
                     <tr
                       key={bill._id}
                       onClick={() => navigate(`/invoices/${bill._id}`)}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer transition-colors"
+                      className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
-                      <td className="py-2.5 font-semibold text-slate-900 dark:text-slate-100">
-                        {bill.invoiceNumber}
+                      <td className="py-3 font-semibold text-slate-900">
+                        {bill.invoiceNumber || '—'}
                       </td>
-                      <td className="py-2.5 text-slate-600 dark:text-slate-400 truncate max-w-[120px]">
+
+                      <td className="max-w-[120px] truncate py-3 text-slate-600">
                         {bill.customerName || 'Walk-in'}
                       </td>
-                      <td className="py-2.5 uppercase font-medium text-slate-500 text-[11px]">
-                        {bill.paymentMethod}
+
+                      <td className="py-3 text-[11px] font-medium uppercase text-slate-500">
+                        {bill.paymentMethod || 'Cash'}
                       </td>
-                      <td className="py-2.5 font-bold text-slate-900 dark:text-slate-100">
+
+                      <td className="py-3 font-bold text-slate-900">
                         {formatCurrency(bill.grandTotal)}
                       </td>
-                      <td className="py-2.5 text-right">
+
+                      <td className="py-3 text-right">
                         {bill.status === 'refunded' ? (
-                          <Badge variant="danger" size="xs">Refunded</Badge>
+                          <Badge variant="danger" size="xs">
+                            Refunded
+                          </Badge>
                         ) : (
-                          <Badge variant="success" size="xs">Completed</Badge>
+                          <Badge variant="success" size="xs">
+                            Completed
+                          </Badge>
                         )}
                       </td>
                     </tr>
@@ -462,7 +589,7 @@ export const DashboardPage = () => {
           )}
         </Card>
 
-        {/* Low Stock Watchlist */}
+        {/* Inventory Watchlist */}
         <div className="space-y-5">
           <Card
             title="Low Stock Watchlist"
@@ -471,7 +598,7 @@ export const DashboardPage = () => {
               isOwner && (
                 <Link
                   to="/products?filter=lowStock"
-                  className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline inline-flex items-center gap-1"
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline"
                 >
                   Manage
                 </Link>
@@ -479,31 +606,35 @@ export const DashboardPage = () => {
             }
           >
             {lowStockProducts.length === 0 ? (
-              <div className="text-center py-6 text-slate-400 text-xs">
+              <div className="py-6 text-center text-xs text-slate-400">
                 All catalog items have sufficient stock.
               </div>
             ) : (
               <div className="space-y-2">
-                {lowStockProducts.map((p) => (
+                {lowStockProducts.map((product) => (
                   <div
-                    key={p._id}
-                    className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 text-xs"
+                    key={product._id}
+                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs"
                   >
                     <div className="min-w-0 pr-2">
-                      <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                        {p.name}
+                      <p className="truncate font-semibold text-slate-800">
+                        {product.name}
                       </p>
-                      <p className="text-[11px] text-slate-400">
-                        Limit: {p.lowStockLimit} {p.unit || 'pcs'}
+
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Limit: {product.lowStockLimit ?? 5}{' '}
+                        {product.unit || 'pcs'}
                       </p>
                     </div>
 
-                    <span className={`font-semibold px-2 py-0.5 rounded text-[11px] shrink-0 ${
-                      p.stock <= 0
-                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                    }`}>
-                      {p.stock} {p.unit || 'pcs'}
+                    <span
+                      className={`shrink-0 rounded border px-2 py-1 text-[11px] font-semibold ${
+                        Number(product.stock ?? 0) <= 0
+                          ? 'border-rose-200 bg-rose-50 text-rose-700'
+                          : 'border-amber-200 bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {product.stock ?? 0} {product.unit || 'pcs'}
                     </span>
                   </div>
                 ))}
@@ -511,23 +642,27 @@ export const DashboardPage = () => {
             )}
           </Card>
 
-          {/* Audit Trail Mini Feed */}
+          {/* Audit Logs */}
           {isOwner && recentActivities.length > 0 && (
             <Card
               title="Audit Logs"
-              subtitle="Latest cashier & store operations"
+              subtitle="Latest cashier and store operations"
             >
-              <div className="space-y-2 text-xs">
-                {recentActivities.map((act) => (
+              <div className="space-y-3 text-xs">
+                {recentActivities.map((activity) => (
                   <div
-                    key={act._id}
-                    className="flex items-start gap-2 text-slate-600 dark:text-slate-300"
+                    key={activity._id}
+                    className="flex items-start gap-2 text-slate-600"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{act.description || act.type}</p>
+                      <p className="truncate font-medium text-slate-800">
+                        {activity.description || activity.type}
+                      </p>
+
                       <span className="text-[10px] text-slate-400">
-                        {formatDateTime(act.createdAt)}
+                        {formatDateTime(activity.createdAt)}
                       </span>
                     </div>
                   </div>
