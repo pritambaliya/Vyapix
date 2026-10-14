@@ -1,9 +1,7 @@
-import React from 'react';
-
 export const Skeleton = ({ className = '', ...props }) => {
   return (
     <div
-      className={`animate-pulse bg-slate-200/80 dark:bg-slate-800/80 rounded-md ${className}`}
+      className={`animate-pulse rounded-md bg-slate-200 ${className}`}
       {...props}
     />
   );
@@ -12,17 +10,27 @@ export const Skeleton = ({ className = '', ...props }) => {
 export const TableSkeleton = ({ rows = 5, cols = 4 }) => {
   return (
     <div className="w-full space-y-2 p-4">
-      {/* Header skeleton */}
-      <div className="flex gap-4 pb-2 border-b border-slate-100 dark:border-slate-800">
-        {Array.from({ length: cols }).map((_, i) => (
-          <Skeleton key={`h-${i}`} className="h-4 flex-1" />
+      {/* Header Skeleton */}
+      <div className="flex gap-4 border-b border-slate-200 pb-2">
+        {Array.from({ length: cols }).map((_, index) => (
+          <Skeleton
+            key={`header-${index}`}
+            className="h-4 flex-1"
+          />
         ))}
       </div>
-      {/* Rows skeleton */}
-      {Array.from({ length: rows }).map((_, r) => (
-        <div key={`r-${r}`} className="flex gap-4 py-2 border-b border-slate-50 dark:border-slate-850">
-          {Array.from({ length: cols }).map((_, c) => (
-            <Skeleton key={`c-${r}-${c}`} className="h-4 flex-1" />
+
+      {/* Table Row Skeletons */}
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <div
+          key={`row-${rowIndex}`}
+          className="flex gap-4 border-b border-slate-100 py-2"
+        >
+          {Array.from({ length: cols }).map((_, colIndex) => (
+            <Skeleton
+              key={`cell-${rowIndex}-${colIndex}`}
+              className="h-4 flex-1"
+            />
           ))}
         </div>
       ))}
@@ -32,16 +40,19 @@ export const TableSkeleton = ({ rows = 5, cols = 4 }) => {
 
 export const CardSkeleton = ({ count = 4 }) => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {Array.from({ length: count }).map((_, i) => (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {Array.from({ length: count }).map((_, index) => (
         <div
-          key={i}
-          className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3"
+          key={index}
+          className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"
         >
-          <div className="flex justify-between items-center">
+          {/* Card Header */}
+          <div className="flex items-center justify-between">
             <Skeleton className="h-3 w-20" />
             <Skeleton className="h-7 w-7 rounded-lg" />
           </div>
+
+          {/* Card Content */}
           <Skeleton className="h-6 w-28" />
           <Skeleton className="h-3 w-36" />
         </div>

@@ -338,11 +338,10 @@ export const DashboardPage = () => {
               </span>
 
               <div
-                className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-                  stats.lowStockCount > 0
+                className={`flex h-9 w-9 items-center justify-center rounded-lg ${stats.lowStockCount > 0
                     ? 'bg-rose-50 text-rose-600'
                     : 'bg-slate-100 text-slate-500'
-                }`}
+                  }`}
               >
                 <AlertTriangle className="h-4 w-4" />
               </div>
@@ -350,11 +349,10 @@ export const DashboardPage = () => {
 
             <div className="mt-4">
               <h2
-                className={`text-2xl font-bold ${
-                  stats.lowStockCount > 0
+                className={`text-2xl font-bold ${stats.lowStockCount > 0
                     ? 'text-rose-600'
                     : 'text-slate-900'
-                }`}
+                  }`}
               >
                 {stats.lowStockCount}
               </h2>
@@ -443,74 +441,135 @@ export const DashboardPage = () => {
         </Card>
 
         {/* Payment Breakdown */}
+
         <Card
           title="Payment Channels"
           subtitle="Revenue by payment mode"
         >
-          <div className="flex h-64 w-full flex-col items-center justify-center">
+          <div className="w-full">
             {paymentBreakdown.length === 0 ? (
-              <div className="py-10 text-center text-xs text-slate-400">
-                No payment data available
+              <div className="flex h-64 flex-col items-center justify-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                  <ShoppingCart className="h-5 w-5 text-slate-400" />
+                </div>
+
+                <p className="text-sm font-medium text-slate-700">
+                  No payment data available
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Payment statistics will appear here.
+                </p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={paymentBreakdown}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={50}
-                    outerRadius={75}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {paymentBreakdown.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={PIE_COLORS[index % PIE_COLORS.length]}
+              <>
+                {/* Donut Chart */}
+                <div className="relative h-56 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={paymentBreakdown}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={62}
+                        outerRadius={88}
+                        paddingAngle={3}
+                        cornerRadius={4}
+                        dataKey="value"
+                        nameKey="name"
+                        stroke="none"
+                      >
+                        {paymentBreakdown.map((entry, index) => (
+                          <Cell
+                            key={`payment-${entry.name}-${index}`}
+                            fill={PIE_COLORS[index % PIE_COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '10px',
+                          padding: '8px 12px',
+                          fontSize: '12px',
+                          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+                        }}
+                        formatter={(value) => [
+                          formatCurrency(Number(value)),
+                          'Revenue',
+                        ]}
                       />
-                    ))}
-                  </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
 
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      borderColor: '#E2E8F0',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#0F172A',
-                    }}
-                    formatter={(value) => [
-                      formatCurrency(Number(value)),
-                      'Amount',
-                    ]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
+                  {/* Center Total */}
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+                      Total Revenue
+                    </span>
 
-            {paymentBreakdown.length > 0 && (
-              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
-                {paymentBreakdown.map((payment, index) => (
-                  <div
-                    key={payment.name}
-                    className="flex items-center gap-1.5 text-xs text-slate-600"
-                  >
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{
-                        backgroundColor:
-                          PIE_COLORS[index % PIE_COLORS.length],
-                      }}
-                    />
-
-                    <span className="font-medium">{payment.name}</span>
+                    <span className="mt-1 max-w-[140px] truncate text-lg font-bold text-slate-900">
+                      {formatCurrency(
+                        paymentBreakdown.reduce(
+                          (total, payment) => total + Number(payment.value || 0),
+                          0
+                        )
+                      )}
+                    </span>
                   </div>
-                ))}
-              </div>
+                </div>
+
+                {/* Payment Method Breakdown */}
+                <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                  {paymentBreakdown.map((payment, index) => {
+                    const total = paymentBreakdown.reduce(
+                      (sum, item) => sum + Number(item.value || 0),
+                      0
+                    );
+
+                    const amount = Number(payment.value || 0);
+                    const percentage =
+                      total > 0 ? (amount / total) * 100 : 0;
+
+                    return (
+                      <div
+                        key={payment.name}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span
+                            className="h-3 w-3 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor:
+                                PIE_COLORS[index % PIE_COLORS.length],
+                            }}
+                          />
+
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-700">
+                              {payment.name}
+                            </p>
+
+                            <p className="text-xs text-slate-400">
+                              {percentage.toFixed(1)}% of revenue
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className="shrink-0 text-sm font-semibold text-slate-900">
+                          {formatCurrency(amount)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
         </Card>
+
       </div>
 
       {/* Recent Transactions and Inventory */}
@@ -628,11 +687,10 @@ export const DashboardPage = () => {
                     </div>
 
                     <span
-                      className={`shrink-0 rounded border px-2 py-1 text-[11px] font-semibold ${
-                        Number(product.stock ?? 0) <= 0
+                      className={`shrink-0 rounded border px-2 py-1 text-[11px] font-semibold ${Number(product.stock ?? 0) <= 0
                           ? 'border-rose-200 bg-rose-50 text-rose-700'
                           : 'border-amber-200 bg-amber-50 text-amber-700'
-                      }`}
+                        }`}
                     >
                       {product.stock ?? 0} {product.unit || 'pcs'}
                     </span>

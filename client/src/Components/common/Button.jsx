@@ -20,7 +20,7 @@ export const Button = ({
     primary:
       'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs active:bg-emerald-800',
     secondary:
-      'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 shadow-xs active:bg-slate-100',
+      'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 hover:text-black shadow-xs active:bg-slate-100',
     outline:
       'bg-transparent border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200',
     danger:

@@ -15,6 +15,7 @@ import SolutionDetails from "../pages/solution/SolutionDetails";
 import PricingPage from "../pages/pricing/PricingPage";
 import DashboardPage from "../pages/dashboard/DashboardPage";
 import AppLayout from "../Components/layout/AppLayout";
+import PosBillingPage from "../pages/billing/PosBillingPage";
 
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, role, loading } = useAuth();
@@ -100,6 +101,7 @@ const AppRoutes = () => {
 
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<ProtectedRoute allowedRoles={["owner"]}> <DashboardPage /> </ProtectedRoute>} />
+        <Route path="/billing" element={ <ProtectedRoute allowedRoles={['owner', 'cashier']}> <PosBillingPage /> </ProtectedRoute> } />
       </Route>
 
 
