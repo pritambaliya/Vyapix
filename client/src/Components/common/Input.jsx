@@ -23,30 +23,37 @@ export const Input = forwardRef(
     ref
   ) => {
     const [showPassword, setShowPassword] = useState(false);
+
     const isPassword = type === 'password';
-    const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
+    const inputType = isPassword
+      ? showPassword
+        ? 'text'
+        : 'password'
+      : type;
 
     return (
-      <div className="w-full space-y-1">
+      <div className="w-full space-y-1.5">
         {label && (
           <label
             htmlFor={name}
-            className="block text-xs font-medium text-slate-700 dark:text-slate-300"
+            className="block text-xs font-medium text-slate-700"
           >
             {label}
-            {required && <span className="text-rose-500 ml-1">*</span>}
+            {required && (
+              <span className="ml-1 text-rose-500">*</span>
+            )}
           </label>
         )}
 
         <div className="relative flex items-center">
           {Icon && (
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-              <Icon className="w-4 h-4" />
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+              <Icon className="h-4 w-4" />
             </div>
           )}
 
           {prefix && (
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs font-medium text-slate-500 dark:text-slate-400">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-medium text-slate-500">
               {prefix}
             </span>
           )}
@@ -56,53 +63,70 @@ export const Input = forwardRef(
             id={name}
             name={name}
             type={inputType}
-            value={value}
+            value={value ?? ''}
             onChange={onChange}
             disabled={disabled}
             placeholder={placeholder}
-            className={`w-full h-9 rounded-lg border bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 text-xs sm:text-sm transition-colors duration-150 focus:outline-none focus:ring-1 ${
-              error
-                ? 'border-rose-500 focus:ring-rose-500 focus:border-rose-500'
-                : 'border-slate-300 dark:border-slate-700 focus:ring-emerald-500 focus:border-emerald-500'
-            } ${disabled ? 'bg-slate-100 dark:bg-slate-800/60 cursor-not-allowed opacity-75' : ''} ${
-              Icon ? 'pl-9' : prefix ? 'pl-8' : 'pl-3'
-            } ${isPassword || suffix ? 'pr-9' : 'pr-3'} ${className}`}
+            aria-invalid={Boolean(error)}
+            className={`
+              h-10 w-full rounded-lg border
+              bg-slate-50
+              text-sm text-slate-800
+             
+              placeholder:text-slate-400
+              transition-all duration-200
+              focus:bg-white
+              focus:outline-none
+              focus:ring-2
+              ${
+                error
+                  ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-100'
+                  : 'border-slate-200 hover:border-slate-300 focus:border-orange-500 focus:ring-orange-100'
+              }
+              ${
+                disabled
+                  ? 'cursor-not-allowed bg-slate-100 opacity-70'
+                  : ''
+              }
+              ${Icon ? 'pl-9' : prefix ? 'pl-8' : 'pl-3'}
+              ${isPassword || suffix ? 'pr-9' : 'pr-3'}
+              ${className}
+            `}
             {...props}
           />
 
           {isPassword && (
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              tabIndex={-1}
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 transition-colors hover:text-orange-600"
+              aria-label={
+                showPassword ? 'Hide password' : 'Show password'
+              }
             >
               {showPassword ? (
-                <EyeOff className="w-4 h-4" />
+                <EyeOff className="h-4 w-4" />
               ) : (
-                <Eye className="w-4 h-4" />
+                <Eye className="h-4 w-4" />
               )}
             </button>
           )}
 
           {suffix && !isPassword && (
-            <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-xs font-medium text-slate-500 dark:text-slate-400">
+            <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-xs font-medium text-slate-500">
               {suffix}
             </span>
           )}
         </div>
 
         {error && (
-          <p className="text-[11px] text-rose-500 dark:text-rose-400 font-medium">
+          <p className="text-xs font-medium text-rose-500" role="alert">
             {error}
           </p>
         )}
 
         {!error && helperText && (
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            {helperText}
-          </p>
+          <p className="text-xs text-slate-500">{helperText}</p>
         )}
       </div>
     );
@@ -110,4 +134,5 @@ export const Input = forwardRef(
 );
 
 Input.displayName = 'Input';
+
 export default Input;

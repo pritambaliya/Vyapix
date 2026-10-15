@@ -150,9 +150,6 @@ export const ProductsPage = () => {
     }));
   };
 
-  // ==========================================
-  // SAVE PRODUCT
-  // ==========================================
 
   const handleSaveProduct = async (payload, id) => {
     setModalLoading(true);
@@ -783,8 +780,7 @@ export const ProductsPage = () => {
                 page,
               }));
             }}
-          />
-
+          />  
         </div>
       </div>
 

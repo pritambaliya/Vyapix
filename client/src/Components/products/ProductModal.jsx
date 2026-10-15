@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Barcode, Package, Tag, Percent, Layers } from 'lucide-react';
+import {Barcode, Package, Tag, Percent, Layers} from 'lucide-react';
 
 import Modal from '../common/Modal';
 import Input from '../common/Input';
@@ -7,7 +7,32 @@ import Select from '../common/Select';
 import Button from '../common/Button';
 
 const GST_RATES = [0, 5, 12, 18, 28];
-const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'pack', 'unit'];
+
+const UNITS = [
+  'pcs',
+  'kg',
+  'gm',
+  'ltr',
+  'ml',
+  'box',
+  'pack',
+  'unit',
+];
+
+const CATEGORIES = [
+  'Groceries',
+  'Food & Beverages',
+  'Dairy Products',
+  'Fruits & Vegetables',
+  'Personal Care',
+  'Household',
+  'Electronics',
+  'Clothing',
+  'Stationery',
+  'Medicines',
+  'Hardware',
+  'Other',
+];
 
 const INITIAL_FORM = {
   name: '',
@@ -51,8 +76,13 @@ export const ProductModal = ({
             ? String(product.sellingPrice)
             : '',
         gstRate:
-          product.gstRate != null ? Number(product.gstRate) : 0,
-        stock: product.stock != null ? String(product.stock) : '',
+          product.gstRate != null
+            ? Number(product.gstRate)
+            : 0,
+        stock:
+          product.stock != null
+            ? String(product.stock)
+            : '',
         lowStockLimit:
           product.lowStockLimit != null
             ? String(product.lowStockLimit)
@@ -91,6 +121,7 @@ export const ProductModal = ({
     }
 
     const sellingPrice = Number(formData.sellingPrice);
+
     if (
       formData.sellingPrice === '' ||
       !Number.isFinite(sellingPrice) ||
@@ -126,12 +157,14 @@ export const ProductModal = ({
 
     if (
       formData.stock !== '' &&
-      Number(formData.stock) < 0
+      (!Number.isFinite(Number(formData.stock)) ||
+        Number(formData.stock) < 0)
     ) {
-      errs.stock = 'Stock cannot be negative';
+      errs.stock = 'Enter a valid non-negative stock quantity';
     }
 
     setErrors(errs);
+
     return Object.keys(errs).length === 0;
   };
 
@@ -158,14 +191,35 @@ export const ProductModal = ({
           : 5,
     };
 
-    // Set initial stock only when creating a product.
-    // Existing stock should be changed through inventory operations.
     if (!isEdit) {
       payload.stock = Number(formData.stock);
     }
 
     onSave(payload, product?._id || product?.id);
   };
+
+  const sectionHeading = (Icon, title, description) => (
+    <div className="mb-4 flex items-center gap-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-orange-100 bg-orange-50 text-orange-600">
+        <Icon className="h-5 w-5" />
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold text-slate-800">
+          {title}
+        </h4>
+        <p className="mt-0.5 text-xs text-slate-500">
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+
+  const selectOptions = (items) =>
+    items.map((item) => ({
+      value: item,
+      label: item,
+    }));
 
   return (
     <Modal
@@ -179,7 +233,7 @@ export const ProductModal = ({
       }
       maxWidth="max-w-xl"
       footer={
-        <div className="flex w-full justify-end gap-2">
+        <div className="flex w-full justify-end gap-3">
           <Button
             variant="outline"
             size="sm"
@@ -201,25 +255,16 @@ export const ProductModal = ({
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}
-        <div>
-          <div className="mb-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
-              <Package className="h-4 w-4" />
-            </div>
+        <section>
+          {sectionHeading(
+            Package,
+            'Basic Information',
+            'Product name, category and measurement'
+          )}
 
-            <div>
-              <h4 className="text-sm font-semibold text-slate-800">
-                Basic Information
-              </h4>
-              <p className="text-xs text-slate-500">
-                Product name, category and measurement
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
+          <div className="space-y-4">
             <Input
               label="Product Name"
               name="name"
@@ -230,13 +275,14 @@ export const ProductModal = ({
               required
             />
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Input
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Select
                 label="Category"
                 name="category"
-                placeholder="e.g. Groceries"
                 value={formData.category}
                 onChange={handleChange}
+                options={selectOptions(CATEGORIES)}
+                placeholder="Select category"
               />
 
               <Select
@@ -244,30 +290,21 @@ export const ProductModal = ({
                 name="unit"
                 value={formData.unit}
                 onChange={handleChange}
-                options={UNITS}
+                options={selectOptions(UNITS)}
               />
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Product Identifiers */}
-        <div className="border-t border-slate-100 pt-4">
-          <div className="mb-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
-              <Barcode className="h-4 w-4" />
-            </div>
+        {/* Product Identification */}
+        <section className="border-t border-slate-100 pt-5">
+          {sectionHeading(
+            Barcode,
+            'Product Identification',
+            'Optional SKU and barcode'
+          )}
 
-            <div>
-              <h4 className="text-sm font-semibold text-slate-800">
-                Product Identification
-              </h4>
-              <p className="text-xs text-slate-500">
-                Optional SKU and barcode
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="SKU Code"
               name="sku"
@@ -279,108 +316,80 @@ export const ProductModal = ({
             <Input
               label="Barcode (EAN / UPC)"
               name="barcode"
-              placeholder="e.g. 8901234567890"
+              placeholder="Enter barcode number"
               value={formData.barcode}
               onChange={handleChange}
               icon={Barcode}
             />
           </div>
-        </div>
+        </section>
 
-        {/* Pricing & Tax */}
-        <div className="border-t border-slate-100 pt-4">
-          <div className="mb-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
-              <Tag className="h-4 w-4" />
-            </div>
+        {/* Pricing and Tax */}
+        <section className="border-t border-slate-100 pt-5">
+          {sectionHeading(
+            Tag,
+            'Pricing & Tax',
+            'Set purchase price, selling price and GST'
+          )}
 
-            <div>
-              <h4 className="text-sm font-semibold text-slate-800">
-                Pricing & Tax
-              </h4>
-              <p className="text-xs text-slate-500">
-                Set purchase price, selling price and GST
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input
-              label="Purchase Price (₹)"
-              name="purchasePrice"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              prefix="₹"
-              value={formData.purchasePrice}
-              onChange={handleChange}
-              error={errors.purchasePrice}
-              helperText="Your cost price"
-            />
-
-            <Input
-              label="Selling Price (₹)"
-              name="sellingPrice"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              prefix="₹"
-              value={formData.sellingPrice}
-              onChange={handleChange}
-              error={errors.sellingPrice}
-              required
-              helperText="Base selling price per unit"
-            />
-          </div>
-
-          <div className="mt-3">
-            <label
-              htmlFor="gstRate"
-              className="mb-1.5 block text-xs font-medium text-slate-700"
-            >
-              GST Slab Rate
-            </label>
-
-            <div className="relative">
-              <Percent className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-500" />
-
-              <select
-                id="gstRate"
-                name="gstRate"
-                value={formData.gstRate}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="product-price-input">
+              <Input
+                label="Purchase Price (₹)"
+                name="purchasePrice"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                prefix="₹"
+                value={formData.purchasePrice}
                 onChange={handleChange}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 transition-all hover:border-orange-300 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
-              >
-                {GST_RATES.map((rate) => (
-                  <option key={rate} value={rate}>
-                    {rate}% GST
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Inventory */}
-        <div className="border-t border-slate-100 pt-4">
-          <div className="mb-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
-              <Layers className="h-4 w-4" />
+                error={errors.purchasePrice}
+                helperText="Your cost price"
+              />
             </div>
 
-            <div>
-              <h4 className="text-sm font-semibold text-slate-800">
-                Inventory Settings
-              </h4>
-              <p className="text-xs text-slate-500">
-                Manage stock and low-stock alerts
-              </p>
+            <div className="product-price-input">
+              <Input
+                label="Selling Price (₹)"
+                name="sellingPrice"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                prefix="₹"
+                value={formData.sellingPrice}
+                onChange={handleChange}
+                error={errors.sellingPrice}
+                required
+                helperText="Base selling price per unit"
+              />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="mt-4">
+            <Select
+              label="GST Slab Rate"
+              name="gstRate"
+              value={String(formData.gstRate)}
+              onChange={handleChange}
+              options={GST_RATES.map((rate) => ({
+                value: String(rate),
+                label: `${rate}% GST`,
+              }))}
+            />
+          </div>
+        </section>
+
+        {/* Inventory Settings */}
+        <section className="border-t border-slate-100 pt-5">
+          {sectionHeading(
+            Layers,
+            'Inventory Settings',
+            'Manage stock and low-stock alerts'
+          )}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {!isEdit ? (
               <Input
                 label="Initial Stock Quantity"
@@ -405,12 +414,12 @@ export const ProductModal = ({
                     {product?.stock ?? 0} {formData.unit}
                   </span>
 
-                  <span className="rounded-md bg-orange-100 px-2 py-1 text-[10px] font-semibold text-orange-700">
+                  <span className="rounded-md bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700">
                     Current
                   </span>
                 </div>
 
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-slate-500">
                   Adjust stock through inventory operations.
                 </p>
               </div>
@@ -429,8 +438,32 @@ export const ProductModal = ({
               helperText="Alert when stock reaches this level"
             />
           </div>
-        </div>
+        </section>
       </form>
+
+      {/* Remove number-input spinner arrows and soften placeholders */}
+      <style>{`
+        .product-price-input input[type="number"]::-webkit-inner-spin-button,
+        .product-price-input input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+
+        .product-price-input input[type="number"] {
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+          color: #94a3b8;
+          opacity: 1;
+        }
+
+        select:invalid {
+          color: #94a3b8;
+        }
+      `}</style>
     </Modal>
   );
 };
