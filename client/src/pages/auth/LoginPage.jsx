@@ -189,13 +189,10 @@ export const LoginPage = () => {
           </Link>
         </header>
 
-        {/* Main content */}
         <section className="relative z-10 flex flex-1 items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
 
-          {/* Combined rectangular container */}
           <div className="login-container-enter grid w-full max-w-5xl grid-cols-1 overflow-hidden border border-slate-200 bg-white shadow-[0_12px_50px_rgba(15,23,42,0.07)] md:grid-cols-[0.85fr_1.15fr]">
 
-            {/* Left promotional section */}
             <div className="relative flex flex-col justify-center overflow-hidden border-b border-slate-200 bg-orange-50/60 p-6 sm:p-8 md:border-b-0 md:border-r lg:p-10">
 
               <div className="relative z-10">
@@ -216,16 +213,14 @@ export const LoginPage = () => {
                   simple tools designed for your daily business operations.
                 </p>
 
-                {/* Small promotional image */}
                 <div className="mt-6 overflow-hidden border border-slate-200 bg-white">
                   <img
-                    src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=900&q=80"
+                    src="../../../public/images/pos.png"
                     alt="Retail business owner handling a customer transaction"
                     className="h-40 w-full object-cover sm:h-48"
                   />
                 </div>
 
-                {/* Key benefits */}
                 <div className="mt-5 space-y-3">
                   {[
                     'Fast and simple billing',
@@ -248,7 +243,6 @@ export const LoginPage = () => {
               </div>
             </div>
 
-            {/* Right login section */}
             <div className="flex items-center justify-center p-6 sm:p-9 lg:p-12">
 
               <div className="w-full max-w-md">
@@ -263,7 +257,6 @@ export const LoginPage = () => {
                   </p>
                 </div>
 
-                {/* Role tabs */}
                 <div className="mb-6 grid grid-cols-2 border border-slate-200 bg-white">
 
                   <button
@@ -290,14 +283,12 @@ export const LoginPage = () => {
 
                 </div>
 
-                {/* Error message */}
                 {errors.form && (
                   <div className="mb-5 border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-600">
                     {errors.form}
                   </div>
                 )}
 
-                {/* Owner login form */}
                 {activeTab === 'owner' ? (
                   <form
                     onSubmit={handleOwnerSubmit}

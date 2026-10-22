@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import {Barcode, Package, Tag, Percent, Layers} from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Barcode, Package, Tag, Percent, Layers, Camera } from 'lucide-react';
 
 import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+import BarcodeScanner from './BarcodeScanner';
 
 const GST_RATES = [0, 5, 12, 18, 28];
 
@@ -46,6 +47,7 @@ const INITIAL_FORM = {
   stock: '',
   lowStockLimit: '5',
 };
+
 
 export const ProductModal = ({
   isOpen,
@@ -215,6 +217,20 @@ export const ProductModal = ({
     </div>
   );
 
+  const [showScanner, setShowScanner] = useState(false);
+
+  const handleBarcodeScan = useCallback((barcode) => {
+    setFormData((prev) => ({
+      ...prev,
+      barcode,
+    }));
+  }, []);
+
+
+  const closeScanner = useCallback(() => {
+    setShowScanner(false);
+  }, []);
+
   const selectOptions = (items) =>
     items.map((item) => ({
       value: item,
@@ -296,7 +312,6 @@ export const ProductModal = ({
           </div>
         </section>
 
-        {/* Product Identification */}
         <section className="border-t border-slate-100 pt-5">
           {sectionHeading(
             Barcode,
@@ -321,10 +336,25 @@ export const ProductModal = ({
               onChange={handleChange}
               icon={Barcode}
             />
+
+            <button
+              type="button"
+              onClick={() => setShowScanner(true)}
+              className="mt-2 flex items-center gap-2 rounded-lg border px-4 py-2"
+            >
+              <Camera size={18} />
+              Scan Barcode
+            </button>
+
+            {showScanner && (
+              <BarcodeScanner
+                onScan={handleBarcodeScan}
+                onClose={closeScanner}
+              />
+            )}
           </div>
         </section>
 
-        {/* Pricing and Tax */}
         <section className="border-t border-slate-100 pt-5">
           {sectionHeading(
             Tag,

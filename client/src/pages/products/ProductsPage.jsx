@@ -456,8 +456,6 @@ export const ProductsPage = () => {
 
       <div className="overflow-hidden rounded-xl border border-orange-100 bg-white shadow-sm">
 
-        {/* TABLE HEADER */}
-
         <div className="flex flex-col gap-2 border-b border-orange-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
 
           <div>
@@ -476,8 +474,6 @@ export const ProductsPage = () => {
           </div>
         </div>
 
-        {/* LOADING */}
-
         {loading ? (
           <div className="p-4">
             <TableSkeleton
@@ -486,8 +482,7 @@ export const ProductsPage = () => {
             />
           </div>
         ) : products.length === 0 ? (
-
-          /* EMPTY STATE */
+ 
 
           <div className="px-4 py-12">
             <EmptyState
@@ -504,8 +499,6 @@ export const ProductsPage = () => {
           </div>
 
         ) : (
-
-          /* TABLE CONTENT */
 
           <div className="overflow-x-auto">
 
@@ -678,7 +671,6 @@ export const ProductsPage = () => {
                         </div>
                       </td>
 
-                      {/* ACTIONS */}
 
                       <td className="px-4 py-3.5">
 
@@ -686,7 +678,6 @@ export const ProductsPage = () => {
 
                           {isOwner ? (
                             <>
-                              {/* ADJUST STOCK */}
 
                               <button
                                 type="button"
@@ -700,8 +691,7 @@ export const ProductsPage = () => {
                               >
                                 <Sliders className="h-4 w-4" />
                               </button>
-
-                              {/* INVENTORY HISTORY */}
+ 
 
                               <button
                                 type="button"
@@ -719,8 +709,6 @@ export const ProductsPage = () => {
                                 <History className="h-4 w-4" />
                               </button>
 
-                              {/* EDIT PRODUCT */}
-
                               <button
                                 type="button"
                                 onClick={() =>
@@ -732,8 +720,7 @@ export const ProductsPage = () => {
                               >
                                 <Edit2 className="h-4 w-4" />
                               </button>
-
-                              {/* DELETE PRODUCT */}
+ 
 
                               <button
                                 type="button"
