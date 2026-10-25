@@ -19,16 +19,21 @@ export const Button = ({
   const variants = {
     primary:
       'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs active:bg-emerald-800',
+
     secondary:
-      'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 hover:text-black shadow-xs active:bg-slate-100',
+      'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 hover:text-black shadow-xs active:bg-slate-100',
+
     outline:
-      'bg-transparent border border-slate-300 dark:border-slate-700 text-slate-300 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200',
+      'bg-transparent border border-slate-700 text-slate-700 hover:bg-slate-700 hover:text-white active:bg-slate-200',
+
     danger:
       'bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 shadow-xs active:bg-rose-800',
+
     ghost:
-      'bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
+      'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+
     indigo:
-      'bg-slate-800 hover:bg-slate-900 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white border border-transparent shadow-xs',
+      'bg-slate-800 hover:bg-slate-900 text-white border border-transparent shadow-xs',
   };
 
   const sizes = {
@@ -51,10 +56,13 @@ export const Button = ({
       {loading && (
         <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
       )}
+
       {!loading && Icon && iconPosition === 'left' && (
         <Icon className="w-4 h-4 shrink-0" />
       )}
+
       {children}
+
       {!loading && Icon && iconPosition === 'right' && (
         <Icon className="w-4 h-4 shrink-0" />
       )}

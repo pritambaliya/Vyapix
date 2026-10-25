@@ -17,6 +17,8 @@ import DashboardPage from "../pages/dashboard/DashboardPage";
 import AppLayout from "../Components/layout/AppLayout";
 import PosBillingPage from "../pages/billing/PosBillingPage";
 import ProductsPage from "../pages/products/ProductsPage";
+import InvoiceDetailPage from "../pages/invoices/InvoiceDetailPage";
+import InvoicesPage from "../pages/invoices/InvoicesPage";
 
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, role, loading } = useAuth();
@@ -104,6 +106,8 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<ProtectedRoute allowedRoles={["owner"]}> <DashboardPage /> </ProtectedRoute>} />
         <Route path="/billing" element={ <ProtectedRoute allowedRoles={['owner', 'cashier']}> <PosBillingPage /> </ProtectedRoute> } />
         <Route path="/products" element={<ProtectedRoute allowedRoles={['owner']}><ProductsPage /></ProtectedRoute> }/>
+        <Route path="invoices" element={<InvoicesPage />} />
+        <Route path="invoices/:id" element={<InvoiceDetailPage />} />
       </Route>
 
 

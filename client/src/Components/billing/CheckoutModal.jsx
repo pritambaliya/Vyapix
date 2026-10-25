@@ -59,7 +59,7 @@ export const CheckoutModal = ({
       footer={
         <>
           <Button
-            variant="outline"
+            variant='outline'
             size="sm"
             onClick={onClose}
             disabled={loading}
