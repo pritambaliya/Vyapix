@@ -73,7 +73,7 @@ export const Input = forwardRef(
               bg-slate-50
               text-sm text-slate-800
              
-              placeholder:text-slate-400
+              placeholder:!text-slate-400
               transition-all duration-200
               focus:bg-white
               focus:outline-none

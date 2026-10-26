@@ -1,18 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  Store,
-  User,
-  Mail,
-  Phone,
-  Lock,
-  MapPin,
-  Upload,
-  X,
-  ArrowRight,
-  CheckCircle2,
-  ArrowLeft,
-} from 'lucide-react';
+import {Store, User, Mail, Phone, Lock, MapPin, Upload, X, ArrowRight, CheckCircle2, ArrowLeft} from 'lucide-react';
 
 import Input from '../../Components/common/Input';
 import Button from '../../Components/common/Button';
@@ -20,6 +8,7 @@ import BrandLogo from '../../Components/common/BrandLogo';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../Components/common/SEO';
+import PasswordStrength, { isPasswordStrong } from '../../Components/common/PasswordStrength';
 
 export const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -129,6 +118,16 @@ export const RegisterPage = () => {
       errs.address = 'Store address is required';
     }
 
+    if (!isPasswordStrong(formData.password)) {
+      setErrors((prev) => ({
+        ...prev,
+        password:
+          'Password must be Very Strong. Include 8+ characters, uppercase, lowercase, number, and special character.',
+      }));
+
+      return;
+    }
+
     setErrors(errs);
 
     return Object.keys(errs).length === 0;
@@ -152,6 +151,7 @@ export const RegisterPage = () => {
       data.append('shopName', formData.shopName.trim());
       data.append('shopPhone', formData.shopPhone.trim());
       data.append('address', formData.address.trim());
+
 
       if (formData.gstNumber.trim()) {
         data.append(
@@ -328,6 +328,7 @@ export const RegisterPage = () => {
                         name="email"
                         type="email"
                         placeholder="you@example.com"
+                        autoComplete="off"
                         icon={Mail}
                         value={formData.email}
                         onChange={handleChange}
@@ -340,6 +341,7 @@ export const RegisterPage = () => {
                         name="phone"
                         type="tel"
                         placeholder="Enter mobile number"
+                        autoComplete="off"
                         icon={Phone}
                         value={formData.phone}
                         onChange={handleChange}
@@ -347,17 +349,23 @@ export const RegisterPage = () => {
                         required
                       />
 
-                      <Input
-                        label="Account Password"
-                        name="password"
-                        type="password"
-                        placeholder="Minimum 6 characters"
-                        icon={Lock}
-                        value={formData.password}
-                        onChange={handleChange}
-                        error={errors.password}
-                        required
-                      />
+                      <div>
+                        <Input
+                          label="Account Password"
+                          name="password"
+                          type="password"
+                          placeholder="Create a strong password"
+                          icon={Lock}
+                          value={formData.password}
+                          onChange={handleChange}
+                          error={errors.password}
+                          required
+                        />
+
+                        {!errors.password && (
+                          <PasswordStrength password={formData.password} />
+                        )}
+                      </div>
 
                     </div>
                   </section>
@@ -377,6 +385,7 @@ export const RegisterPage = () => {
                         label="Store / Business Name"
                         name="shopName"
                         placeholder="Enter your store name"
+                        autoComplete="off"
                         icon={Store}
                         value={formData.shopName}
                         onChange={handleChange}
@@ -389,6 +398,7 @@ export const RegisterPage = () => {
                         name="shopPhone"
                         type="tel"
                         placeholder="Enter store phone number"
+                        autoComplete="off"
                         icon={Phone}
                         value={formData.shopPhone}
                         onChange={handleChange}
@@ -403,6 +413,7 @@ export const RegisterPage = () => {
                         label="Store Address"
                         name="address"
                         placeholder="Enter your complete store address"
+                        autoComplete="off"
                         icon={MapPin}
                         value={formData.address}
                         onChange={handleChange}
@@ -417,6 +428,7 @@ export const RegisterPage = () => {
                         name="gstNumber"
                         placeholder="e.g. 24AAAAA0000A1Z5"
                         value={formData.gstNumber}
+                        autoComplete="off"
                         onChange={handleChange}
                         helperText="Add your GSTIN to include it in your store profile."
                         required

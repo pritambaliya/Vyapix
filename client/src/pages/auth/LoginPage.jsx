@@ -300,6 +300,7 @@ export const LoginPage = () => {
                       name="email"
                       type="email"
                       placeholder="you@example.com"
+                      autoComplete="off"
                       icon={Mail}
                       value={ownerEmail}
                       onChange={(e) => setOwnerEmail(e.target.value)}
@@ -313,6 +314,7 @@ export const LoginPage = () => {
                       name="password"
                       type="password"
                       placeholder="Enter your password"
+                      autoComplete="off"
                       icon={Lock}
                       value={ownerPassword}
                       onChange={(e) => setOwnerPassword(e.target.value)}
@@ -354,6 +356,7 @@ export const LoginPage = () => {
                       label="Billing Code"
                       name="billingCode"
                       placeholder="e.g. VXP-XXXXXX"
+                      autoComplete="off"
                       icon={KeyRound}
                       value={billingCode}
                       onChange={(e) =>
@@ -370,6 +373,7 @@ export const LoginPage = () => {
                       name="password"
                       type="password"
                       placeholder="Enter your password"
+                      autoComplete="off"
                       icon={Lock}
                       value={billingPassword}
                       onChange={(e) => setBillingPassword(e.target.value)}
