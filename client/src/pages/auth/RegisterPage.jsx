@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {Store, User, Mail, Phone, Lock, MapPin, Upload, X, ArrowRight, CheckCircle2, ArrowLeft} from 'lucide-react';
+import { Store, User, Mail, Phone, Lock, MapPin, Upload, X, ArrowRight, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 import Input from '../../Components/common/Input';
 import Button from '../../Components/common/Button';
@@ -9,6 +9,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../Components/common/SEO';
 import PasswordStrength, { isPasswordStrong } from '../../Components/common/PasswordStrength';
+import ToastContainer from '../../Components/common/ToastContainer';
+import LoadingOverlay from '../../Components/common/LoadingOverlay';
+import PhoneNumberInput from '../../Components/common/PhoneNumberInput';
 
 export const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -98,8 +101,20 @@ export const RegisterPage = () => {
       errs.email = 'Email is required';
     }
 
-    if (!formData.phone.trim()) {
-      errs.phone = 'Phone number is required';
+    if (!formData.phone) {
+      setErrors((prev) => ({
+        ...prev,
+        phone: "Mobile number is required",
+      }));
+      return;
+    }
+
+    if (!isValidPhoneNumber(formData.phone)) {
+      setErrors((prev) => ({
+        ...prev,
+        phone: "Please enter a valid mobile number for the selected country",
+      }));
+      return;
     }
 
     if (!formData.password || formData.password.length < 6) {
@@ -137,6 +152,8 @@ export const RegisterPage = () => {
     e.preventDefault();
 
     if (!validate()) return;
+
+    if (loading) return;
 
     setLoading(true);
     setErrors({});
@@ -177,6 +194,17 @@ export const RegisterPage = () => {
       error(message);
       setErrors({ form: message });
     } finally {
+      const elapsedTime = Date.now() - startTime;
+      const minimumLoadingTime = 4000;
+
+      if (elapsedTime < minimumLoadingTime) {
+        await new Promise((resolve) =>
+          setTimeout(
+            resolve,
+            minimumLoadingTime - elapsedTime
+          )
+        );
+      }
       setLoading(false);
     }
   };
@@ -189,6 +217,13 @@ export const RegisterPage = () => {
         path="/register"
         noIndex
       />
+
+      <ToastContainer />
+
+      {loading && (
+        <LoadingOverlay loading={loading} />
+      )}
+
       <main className="relative flex min-h-screen flex-col overflow-hidden bg-white font-sans">
 
         {/* Background rectangles */}
@@ -336,17 +371,19 @@ export const RegisterPage = () => {
                         required
                       />
 
-                      <Input
+                      <PhoneNumberInput
                         label="Mobile Number"
                         name="phone"
-                        type="tel"
-                        placeholder="Enter mobile number"
-                        autoComplete="off"
-                        icon={Phone}
                         value={formData.phone}
-                        onChange={handleChange}
+                        onChange={(phone) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            phone,
+                          }))
+                        }
                         error={errors.phone}
                         required
+                        defaultCountry="IN"
                       />
 
                       <div>

@@ -1,12 +1,23 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Lock, Mail, KeyRound, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Lock,
+  Mail,
+  KeyRound,
+  ArrowLeft,
+  CheckCircle2,
+} from 'lucide-react';
+
 import Input from '../../Components/common/Input';
 import Button from '../../Components/common/Button';
 import BrandLogo from '../../Components/common/BrandLogo';
+import SEO from '../../Components/common/SEO';
+import ToastContainer from '../../Components/common/ToastContainer';
+
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import SEO from '../../Components/common/SEO';
+import LoadingOverlay from '../../Components/common/LoadingOverlay';
 
 export const LoginPage = () => {
   const [activeTab, setActiveTab] = useState('owner');
@@ -24,21 +35,40 @@ export const LoginPage = () => {
   const { success, error } = useToast();
   const navigate = useNavigate();
 
+  // Handle input changes and clear the corresponding field error
+  const handleChange = (field, value, setter) => {
+    setter(value);
+
+    setErrors((prev) => ({
+      ...prev,
+      [field]: "",
+      form: "",
+    }));
+  };
+
+  // Clear errors when switching between Owner and Cashier
+  const changeTab = (tab) => {
+    setActiveTab(tab);
+    setErrors({});
+  };
+
+  // Owner login
   const handleOwnerSubmit = async (e) => {
     e.preventDefault();
+
     if (loading) return;
 
     const errs = {};
 
     if (!ownerEmail.trim()) {
-      errs.ownerEmail = 'Email address is required';
+      errs.ownerEmail = "Email address is required";
     }
 
     if (!ownerPassword) {
-      errs.ownerPassword = 'Password is required';
+      errs.ownerPassword = "Password is required";
     }
 
-    if (Object.keys(errs).length) {
+    if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
@@ -49,21 +79,24 @@ export const LoginPage = () => {
     const startTime = Date.now();
 
     try {
-      const res = await loginOwner(ownerEmail.trim(), ownerPassword);
+      const res = await loginOwner(
+        ownerEmail.trim(),
+        ownerPassword
+      );
 
       if (res.success) {
-        success('Welcome back, Store Owner!');
-        navigate('/dashboard');
+        success("Welcome back, Store Owner!");
+        navigate("/dashboard");
+      } else {
+        error(res.message || "Login failed. Please try again.");
       }
     } catch (err) {
-      const message =
-        err.message || 'Login failed. Please check your credentials.';
-
-      error(message);
-      setErrors({ form: message });
+      error(
+        err.message || "Login failed. Please check your credentials."
+      );
     } finally {
       const elapsedTime = Date.now() - startTime;
-      const minimumLoadingTime = 2000;
+      const minimumLoadingTime = 3000;
 
       if (elapsedTime < minimumLoadingTime) {
         await new Promise((resolve) =>
@@ -75,26 +108,31 @@ export const LoginPage = () => {
     }
   };
 
+  // Cashier login
   const handleBillingSubmit = async (e) => {
     e.preventDefault();
+
+    if (loading) return;
 
     const errs = {};
 
     if (!billingCode.trim()) {
-      errs.billingCode = 'Billing Code is required';
+      errs.billingCode = "Billing Code is required";
     }
 
     if (!billingPassword) {
-      errs.billingPassword = 'Password is required';
+      errs.billingPassword = "Password is required";
     }
 
-    if (Object.keys(errs).length) {
+    if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
 
     setLoading(true);
     setErrors({});
+
+    const startTime = Date.now();
 
     try {
       const res = await loginBilling(
@@ -103,24 +141,28 @@ export const LoginPage = () => {
       );
 
       if (res.success) {
-        success('Billing session started successfully!');
-        navigate('/billing');
+        success("Billing session started successfully!");
+        navigate("/billing");
+      } else {
+        error(res.message || "Login failed. Please try again.");
       }
     } catch (err) {
-      const message =
+      error(
         err.message ||
-        'Login failed. Please check your billing code and password.';
-
-      error(message);
-      setErrors({ form: message });
+        "Login failed. Please check your billing code and password."
+      );
     } finally {
+      const elapsedTime = Date.now() - startTime;
+      const minimumLoadingTime = 3000;
+
+      if (elapsedTime < minimumLoadingTime) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, minimumLoadingTime - elapsedTime)
+        );
+      }
+
       setLoading(false);
     }
-  };
-
-  const changeTab = (tab) => {
-    setActiveTab(tab);
-    setErrors({});
   };
 
   return (
@@ -132,41 +174,16 @@ export const LoginPage = () => {
         noIndex
       />
 
+      {/* Toast notifications */}
+      <ToastContainer />
+
+      {/* Loading overlay */}
       {loading && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/80 backdrop-blur-sm"
-          role="status"
-          aria-live="polite"
-          aria-label="Signing in"
-        >
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative flex h-16 w-16 items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-4 border-orange-100" />
-
-              <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-orange-500 border-r-orange-500" />
-
-              <div className="h-7 w-7 rounded-full bg-orange-500" />
-            </div>
-
-            <div className="text-center">
-              <p className="text-base font-semibold text-slate-900">
-                Signing you in
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Please wait while we securely access your account...
-              </p>
-            </div>
-
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-600">
-              VYAPIX
-            </span>
-          </div>
-        </div>
+        <LoadingOverlay loading={loading} />
       )}
 
       <main className="relative flex min-h-screen flex-col overflow-hidden bg-white font-sans">
-
+        {/* Background */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -left-20 -top-20 h-72 w-72 rotate-12 border border-orange-100 bg-orange-50/40" />
 
@@ -175,6 +192,7 @@ export const LoginPage = () => {
           <div className="absolute -bottom-28 right-[15%] h-72 w-72 rotate-12 border border-orange-100/70" />
         </div>
 
+        {/* Header */}
         <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8 lg:px-12">
           <Link to="/" aria-label="Vyapix home">
             <BrandLogo size="md" showBadge badgeText="ERP" />
@@ -189,14 +207,12 @@ export const LoginPage = () => {
           </Link>
         </header>
 
+        {/* Main content */}
         <section className="relative z-10 flex flex-1 items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
-
           <div className="login-container-enter grid w-full max-w-5xl grid-cols-1 overflow-hidden border border-slate-200 bg-white shadow-[0_12px_50px_rgba(15,23,42,0.07)] md:grid-cols-[0.85fr_1.15fr]">
-
-            <div className="relative flex flex-col justify-center overflow-hidden border-b border-slate-200 bg-orange-50/60 p-6 sm:p-8 md:border-b-0 md:border-r lg:p-10">
-
+            {/* Left promotional section */}
+            <aside className="relative flex flex-col justify-center overflow-hidden border-b border-slate-200 bg-orange-50/60 p-6 sm:p-8 md:border-b-0 md:border-r lg:p-10">
               <div className="relative z-10">
-
                 <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
                   Business made simple
                 </p>
@@ -215,7 +231,7 @@ export const LoginPage = () => {
 
                 <div className="mt-6 overflow-hidden border border-slate-200 bg-white">
                   <img
-                    src="../../../public/images/pos.png"
+                    src="/images/pos.png"
                     alt="Retail business owner handling a customer transaction"
                     className="h-40 w-full object-cover sm:h-48"
                   />
@@ -239,14 +255,12 @@ export const LoginPage = () => {
                     </div>
                   ))}
                 </div>
-
               </div>
-            </div>
+            </aside>
 
+            {/* Right login section */}
             <div className="flex items-center justify-center p-6 sm:p-9 lg:p-12">
-
               <div className="w-full max-w-md">
-
                 <div className="mb-7">
                   <h2 className="font-heading text-2xl font-bold text-slate-900">
                     Welcome back
@@ -257,8 +271,8 @@ export const LoginPage = () => {
                   </p>
                 </div>
 
+                {/* Tabs */}
                 <div className="mb-6 grid grid-cols-2 border border-slate-200 bg-white">
-
                   <button
                     type="button"
                     onClick={() => changeTab('owner')}
@@ -280,30 +294,26 @@ export const LoginPage = () => {
                   >
                     Cashier
                   </button>
-
                 </div>
 
-                {errors.form && (
-                  <div className="mb-5 border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-600">
-                    {errors.form}
-                  </div>
-                )}
-
+                {/* Owner login */}
                 {activeTab === 'owner' ? (
                   <form
                     onSubmit={handleOwnerSubmit}
+                    autoComplete="on"
                     className="login-form-enter space-y-5"
                   >
-
                     <Input
                       label="Email Address"
                       name="email"
                       type="email"
                       placeholder="you@example.com"
-                      autoComplete="off"
+                      autoComplete="username"
                       icon={Mail}
                       value={ownerEmail}
-                      onChange={(e) => setOwnerEmail(e.target.value)}
+                      onChange={(e) =>
+                        handleChange("ownerEmail", e.target.value, setOwnerEmail)
+                      }
                       error={errors.ownerEmail}
                       required
                       autoFocus
@@ -314,10 +324,12 @@ export const LoginPage = () => {
                       name="password"
                       type="password"
                       placeholder="Enter your password"
-                      autoComplete="off"
+                      autoComplete="current-password"
                       icon={Lock}
                       value={ownerPassword}
-                      onChange={(e) => setOwnerPassword(e.target.value)}
+                      onChange={(e) =>
+                        handleChange("ownerPassword", e.target.value, setOwnerPassword)
+                      }
                       error={errors.ownerPassword}
                       required
                     />
@@ -343,15 +355,14 @@ export const LoginPage = () => {
                         Create an account
                       </Link>
                     </p>
-
                   </form>
                 ) : (
-                  /* Cashier login form */
+                  /* Cashier login */
                   <form
                     onSubmit={handleBillingSubmit}
+                    autoComplete="on"
                     className="login-form-enter space-y-5"
                   >
-
                     <Input
                       label="Billing Code"
                       name="billingCode"
@@ -360,7 +371,11 @@ export const LoginPage = () => {
                       icon={KeyRound}
                       value={billingCode}
                       onChange={(e) =>
-                        setBillingCode(e.target.value.toUpperCase())
+                        handleChange(
+                          "billingCode",
+                          e.target.value.toUpperCase(),
+                          setBillingCode
+                        )
                       }
                       error={errors.billingCode}
                       helperText="Get your billing code from the store owner."
@@ -373,10 +388,16 @@ export const LoginPage = () => {
                       name="password"
                       type="password"
                       placeholder="Enter your password"
-                      autoComplete="off"
+                      autoComplete="current-password"
                       icon={Lock}
                       value={billingPassword}
-                      onChange={(e) => setBillingPassword(e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          "billingPassword",
+                          e.target.value,
+                          setBillingPassword
+                        )
+                      }
                       error={errors.billingPassword}
                       required
                     />
@@ -396,105 +417,93 @@ export const LoginPage = () => {
                     <p className="pt-1 text-center text-sm text-slate-600">
                       Need access? Contact your store owner.
                     </p>
-
                   </form>
                 )}
 
                 {/* Footer links */}
                 <div className="mt-7 flex items-center justify-center gap-5 border-t border-slate-200 pt-5 text-xs text-slate-500">
-
-                  <Link
-                    to="/about"
-                    className="hover:text-orange-600"
-                  >
+                  <Link to="/about" className="hover:text-orange-600">
                     About Vyapix
                   </Link>
 
                   <span className="h-1 w-1 bg-slate-300" />
 
-                  <Link
-                    to="/contact"
-                    className="hover:text-orange-600"
-                  >
-                    Help & Support
+                  <Link to="/contact" className="hover:text-orange-600">
+                    Help &amp; Support
                   </Link>
-
                 </div>
-
               </div>
             </div>
           </div>
         </section>
 
-        {/* Bottom text */}
+        {/* Footer */}
         <footer className="relative z-10 px-4 pb-5 text-center text-xs text-slate-400">
           © {new Date().getFullYear()} Vyapix. Simple billing. Smarter business.
         </footer>
 
         {/* Animations and input styling */}
         <style>{`
-        @keyframes loginContainerEnter {
-          from {
-            opacity: 0;
-            transform: translateY(14px);
+          @keyframes loginContainerEnter {
+            from {
+              opacity: 0;
+              transform: translateY(14px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
           }
-          to {
-            opacity: 1;
-            transform: translateY(0);
+
+          @keyframes loginFormEnter {
+            from {
+              opacity: 0;
+              transform: translateY(8px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
           }
-        }
 
-        @keyframes loginFormEnter {
-          from {
-            opacity: 0;
-            transform: translateY(8px);
+          .login-container-enter {
+            animation: loginContainerEnter 0.55s ease-out both;
           }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
 
-        .login-container-enter {
-          animation: loginContainerEnter 0.55s ease-out both;
-        }
-
-        .login-form-enter {
-          animation: loginFormEnter 0.35s ease-out both;
-        }
-
-        /* White inputs, black text and placeholders */
-        .login-container-enter input,
-        .login-container-enter textarea,
-        .login-container-enter select {
-          background-color: #ffffff !important;
-          color: #111827 !important;
-          border-color: #d1d5db !important;
-          border-radius: 0 !important;
-        }
-
-        .login-container-enter input::placeholder,
-        .login-container-enter textarea::placeholder {
-          color: #111827 !important;
-          opacity: 1;
-        }
-
-        .login-container-enter input:focus,
-        .login-container-enter textarea:focus,
-        .login-container-enter select:focus {
-          border-color: #f97316 !important;
-          outline: 2px solid rgba(249, 115, 22, 0.12);
-          outline-offset: 0;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .login-container-enter,
           .login-form-enter {
-            animation: none;
+            animation: loginFormEnter 0.35s ease-out both;
           }
-        }
-      `}</style>
 
+          .login-container-enter input,
+          .login-container-enter textarea,
+          .login-container-enter select {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            border-color: #d1d5db !important;
+            border-radius: 0 !important;
+          }
+
+          .login-container-enter input::placeholder,
+          .login-container-enter textarea::placeholder {
+            color: #cbd5e1 !important;
+            opacity: 1;
+          }
+
+          .login-container-enter input:focus,
+          .login-container-enter textarea:focus,
+          .login-container-enter select:focus {
+            border-color: #f97316 !important;
+            outline: 2px solid rgba(249, 115, 22, 0.12);
+            outline-offset: 0;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .login-container-enter,
+            .login-form-enter {
+              animation: none;
+            }
+          }
+        `}</style>
       </main>
     </>
   );
