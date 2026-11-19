@@ -41,11 +41,11 @@ export const createBillingAccount = async (req, res) => {
             });
         }
 
-        if (password.length < 4) {
+        if (password.length < 6) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Billing password must be at least 4 characters",
+                    "Billing password must be at least 6 characters",
             });
         }
 
@@ -352,6 +352,8 @@ export const updateBillingAccountStatus = async (req, res) => {
 export const getBillingAccountActivity = async (req, res) => {
     try {
         const { id } = req.params;
+        // FIX M-5: add pagination instead of a hard limit of 100
+        const { page = 1, limit = 50 } = req.query;
 
         const account = await BillingAccount.findOne({
             _id: id,
@@ -365,13 +367,21 @@ export const getBillingAccountActivity = async (req, res) => {
             });
         }
 
+        const skip = (Number(page) - 1) * Number(limit);
+
+        const total = await BillingActivity.countDocuments({
+            ownerId: req.owner._id,
+            billingAccountId: account._id,
+        });
+
         const activities =
             await BillingActivity.find({
                 ownerId: req.owner._id,
                 billingAccountId: account._id,
             })
                 .sort({ createdAt: -1 })
-                .limit(100);
+                .skip(skip)
+                .limit(Number(limit));
 
         return res.status(200).json({
             success: true,
@@ -387,6 +397,13 @@ export const getBillingAccountActivity = async (req, res) => {
                 },
 
                 activities,
+
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    total,
+                    totalPages: Math.ceil(total / Number(limit)),
+                },
             },
         });
     } catch (error) {
@@ -532,17 +549,32 @@ export const getBillingAccounts = async (req, res) => {
 
 export const getAllBillingActivities = async (req, res) => {
     try {
+        // FIX M-5: paginated response instead of a hard limit of 100
+        const { page = 1, limit = 50 } = req.query;
+        const skip = (Number(page) - 1) * Number(limit);
+
+        const total = await BillingActivity.countDocuments({
+            ownerId: req.owner._id,
+        });
+
         const activities = await BillingActivity.find({
             ownerId: req.owner._id,
         })
         .populate("billingAccountId", "accountNumber name employeeName")
         .sort({ createdAt: -1 })
-        .limit(100);
+        .skip(skip)
+        .limit(Number(limit));
 
         return res.status(200).json({
             success: true,
             data: {
                 activities,
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    total,
+                    totalPages: Math.ceil(total / Number(limit)),
+                },
             },
         });
     } catch (error) {

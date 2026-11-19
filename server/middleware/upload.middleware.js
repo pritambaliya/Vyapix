@@ -35,8 +35,9 @@ const fileFilter = (req, file, cb) => {
     const validExtension = allowedExtensions.includes(extension);
     const validMimeType = allowedMimeTypes.includes(file.mimetype);
 
-    // Accept if either MIME type OR extension is valid
-    if (validMimeType || validExtension) {
+    // Accept only when BOTH MIME type AND extension are valid (AND prevents
+    // a spoofed extension on a malicious file from slipping through)
+    if (validMimeType && validExtension) {
         cb(null, true);
     } else {
         cb(

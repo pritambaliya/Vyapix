@@ -1,5 +1,5 @@
 import Product from "../models/product.model.js";
-import Shop from "../models/shop.model.js";
+import Shop from "../models/shop.model.js";           // FIX M-4: static import (was dynamic inside request handler)
 import InventoryActivity from "../models/inventoryActivity.model.js";
 
 export const createProduct = async (req, res) => {
@@ -121,11 +121,12 @@ export const createProduct = async (req, res) => {
 
 export const getProducts = async (req, res) => {
     try {
-        let ownerId = req.owner?._id || req.billingAccount?.ownerId;
+        // Determine identity: owner or cashier (billingAccount)
+        const ownerId = req.owner?._id || req.billingAccount?.ownerId;
         let shopId = req.billingAccount?.shopId;
 
         if (req.owner) {
-            const Shop = (await import("../models/shop.model.js")).default;
+            // FIX M-4: Shop is now statically imported at the top; no dynamic import needed
             const shop = await Shop.findOne({ ownerId: req.owner._id });
             if (shop) {
                 shopId = shop._id;
@@ -194,6 +195,7 @@ export const getProducts = async (req, res) => {
             .limit(Number(limit));
 
         if (req.billingAccount) {
+            // Hide cost price and owner ID from cashier view
             query = query.select(
                 "-purchasePrice -ownerId"
             );
@@ -243,6 +245,7 @@ export const getProductByBarcode = async (req, res) => {
             });
         }
 
+        // req.billingAccount is guaranteed by billingAuthMiddleware on this route
         const product =
             await Product.findOne({
                 shopId:
@@ -305,36 +308,47 @@ export const addStock = async (req, res) => {
             });
         }
 
-        const product = await Product.findOne({
-            _id: id,
-            ownerId: req.owner._id,
-        });
+        const addQty = Number(quantity);
 
-        if (!product) {
+        // FIX H-7: Atomic $inc — eliminates the read-modify-write race condition.
+        // `new: false` returns the document state BEFORE the update so we can
+        // log the accurate previousStock value in InventoryActivity.
+        const previousProduct =
+            await Product.findOneAndUpdate(
+                {
+                    _id: id,
+                    ownerId: req.owner._id,
+                },
+                {
+                    $inc: { stock: addQty },
+                },
+                {
+                    new: false, // return pre-update doc to capture previousStock
+                }
+            );
+
+        if (!previousProduct) {
             return res.status(404).json({
                 success: false,
                 message: "Product not found",
             });
         }
 
-        const previousStock = product.stock;
-
-        product.stock += Number(quantity);
-
-        await product.save();
+        const previousStock = previousProduct.stock;
+        const newStock = previousStock + addQty;
 
         await InventoryActivity.create({
             ownerId: req.owner._id,
-            shopId: product.shopId,
-            productId: product._id,
+            shopId: previousProduct.shopId,
+            productId: previousProduct._id,
 
             type: "stock_added",
 
-            quantity: Number(quantity),
+            quantity: addQty,
 
             previousStock,
 
-            newStock: product.stock,
+            newStock,
 
             reason:
                 reason?.trim() ||
@@ -349,9 +363,9 @@ export const addStock = async (req, res) => {
 
             data: {
                 product: {
-                    id: product._id,
-                    name: product.name,
-                    stock: product.stock,
+                    id: previousProduct._id,
+                    name: previousProduct.name,
+                    stock: newStock,
                 },
             },
         });
@@ -390,22 +404,41 @@ export const removeStock = async (req, res) => {
             });
         }
 
-        const product = await Product.findOne({
-            _id: id,
-            ownerId: req.owner._id,
-        });
+        const removeQty = Number(quantity);
 
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: "Product not found",
+        // FIX H-7: Fully atomic — the $gte guard inside the query filter ensures
+        // stock sufficiency and the decrement happen in one DB round-trip,
+        // eliminating the race condition.
+        // `new: false` returns pre-update doc so we can log accurate previousStock.
+        const previousProduct =
+            await Product.findOneAndUpdate(
+                {
+                    _id: id,
+                    ownerId: req.owner._id,
+                    stock: { $gte: removeQty }, // only proceed if stock is sufficient
+                },
+                {
+                    $inc: { stock: -removeQty },
+                },
+                {
+                    new: false,
+                }
+            );
+
+        if (!previousProduct) {
+            // Distinguish "not found" from "insufficient stock"
+            const exists = await Product.exists({
+                _id: id,
+                ownerId: req.owner._id,
             });
-        }
 
-        const removeQuantity =
-            Number(quantity);
+            if (!exists) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Product not found",
+                });
+            }
 
-        if (removeQuantity > product.stock) {
             return res.status(400).json({
                 success: false,
                 message:
@@ -413,24 +446,21 @@ export const removeStock = async (req, res) => {
             });
         }
 
-        const previousStock = product.stock;
-
-        product.stock -= removeQuantity;
-
-        await product.save();
+        const previousStock = previousProduct.stock;
+        const newStock = previousStock - removeQty;
 
         await InventoryActivity.create({
             ownerId: req.owner._id,
-            shopId: product.shopId,
-            productId: product._id,
+            shopId: previousProduct.shopId,
+            productId: previousProduct._id,
 
             type: "stock_removed",
 
-            quantity: removeQuantity,
+            quantity: removeQty,
 
             previousStock,
 
-            newStock: product.stock,
+            newStock,
 
             reason:
                 reason?.trim() ||
@@ -445,9 +475,9 @@ export const removeStock = async (req, res) => {
 
             data: {
                 product: {
-                    id: product._id,
-                    name: product.name,
-                    stock: product.stock,
+                    id: previousProduct._id,
+                    name: previousProduct.name,
+                    stock: newStock,
                 },
             },
         });
@@ -531,12 +561,18 @@ export const updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // FIX M-8: All editable fields are now accepted (name, sku, barcode, unit were
+        // silently ignored in the original — now they are explicitly handled).
         const {
+            name,
+            sku,
+            barcode,
+            unit,
+            category,
             purchasePrice,
             sellingPrice,
             gstRate,
             lowStockLimit,
-            category,
         } = req.body;
 
         const product = await Product.findOne({
@@ -551,7 +587,60 @@ export const updateProduct = async (req, res) => {
             });
         }
 
-        // Update only provided fields
+        // ── Core identity fields ──────────────────────────────────────────
+        if (name !== undefined) {
+            if (!name.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Product name cannot be empty",
+                });
+            }
+            product.name = name.trim();
+        }
+
+        if (sku !== undefined) {
+            const newSku = sku ? sku.trim().toUpperCase() : undefined;
+
+            if (newSku && newSku !== product.sku) {
+                const conflict = await Product.findOne({
+                    shopId: product.shopId,
+                    sku: newSku,
+                    _id: { $ne: id },
+                });
+                if (conflict) {
+                    return res.status(409).json({
+                        success: false,
+                        message: "Another product with this SKU already exists",
+                    });
+                }
+            }
+            product.sku = newSku || null;
+        }
+
+        if (barcode !== undefined) {
+            const newBarcode = barcode ? barcode.trim() : null;
+
+            if (newBarcode && newBarcode !== product.barcode) {
+                const conflict = await Product.findOne({
+                    shopId: product.shopId,
+                    barcode: newBarcode,
+                    _id: { $ne: id },
+                });
+                if (conflict) {
+                    return res.status(409).json({
+                        success: false,
+                        message: "Another product with this barcode already exists",
+                    });
+                }
+            }
+            product.barcode = newBarcode;
+        }
+
+        if (unit !== undefined) {
+            product.unit = unit.trim() || "pcs";
+        }
+
+        // ── Pricing & classification fields ───────────────────────────────
         if (purchasePrice !== undefined) {
             if (Number(purchasePrice) < 0) {
                 return res.status(400).json({
@@ -614,6 +703,9 @@ export const updateProduct = async (req, res) => {
                 product: {
                     id: product._id,
                     name: product.name,
+                    sku: product.sku,
+                    barcode: product.barcode,
+                    unit: product.unit,
                     purchasePrice: product.purchasePrice,
                     sellingPrice: product.sellingPrice,
                     gstRate: product.gstRate,
@@ -654,6 +746,7 @@ export const deleteProduct = async (req, res) => {
             });
         }
 
+        // Soft-delete: marks as inactive so historical bills remain intact
         product.isActive = false;
         await product.save();
 

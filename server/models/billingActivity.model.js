@@ -19,7 +19,8 @@ const billingActivitySchema = new mongoose.Schema(
         billingAccountId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "BillingAccount",
-            required: true,
+            required: false,
+            default: null,
             index: true,
         },
 

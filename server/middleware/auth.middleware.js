@@ -27,6 +27,8 @@ const authMiddleware = async (req, res, next) => {
 
         req.owner = owner;
 
+        req.user = { id: owner._id, role: "owner" };
+
         next();
     } catch (error) {
         console.error("Auth Middleware Error:", error.message);

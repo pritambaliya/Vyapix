@@ -10,7 +10,7 @@ import {
     deleteProduct
 } from "../controllers/product.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
-import billingMiddleware from "../middleware/billing.middleware.js";
+import billingAuthMiddleware from "../middleware/billingAuth.middleware.js";
 
 const router = express.Router();
 
@@ -24,18 +24,6 @@ router.get(
     "/owner",
     authMiddleware,
     getProducts
-);
-
-router.get(
-    "/billing",
-    billingMiddleware,
-    getProducts
-);
-
-router.get(
-    "/billing/barcode/:barcode",
-    billingMiddleware,
-    getProductByBarcode
 );
 
 router.patch(
@@ -66,6 +54,18 @@ router.delete(
     "/:id",
     authMiddleware,
     deleteProduct
+);
+
+router.get(
+    "/billing",
+    billingAuthMiddleware,
+    getProducts
+);
+
+router.get(
+    "/billing/barcode/:barcode",
+    billingAuthMiddleware,
+    getProductByBarcode
 );
 
 export default router;
