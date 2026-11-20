@@ -4,25 +4,78 @@ import InventoryActivity from "../models/inventoryActivity.model.js";
 
 export const createProduct = async (req, res) => {
     try {
-        const {name, sku, barcode, category, unit, purchasePrice, sellingPrice, gstRate, stock, lowStockLimit } = req.body;
+        const {
+            name,
+            sku,
+            barcode,
+            category,
+            sellingType = "FIXED",
+            unit = "pcs",
+            purchasePrice,
+            sellingPrice,
+            gstRate,
+            stock,
+            lowStockLimit
+        } = req.body;
 
         if (
-            !name ||
+            !name?.trim() ||
             purchasePrice === undefined ||
             sellingPrice === undefined
         ) {
             return res.status(400).json({
                 success: false,
-                message:
-                    "Name, purchase price and selling price are required",
+                message: "Name, purchase price and selling price are required",
+            });
+        }
+
+        const allowedSellingTypes = ["FIXED", "WEIGHT"];
+
+        if (!allowedSellingTypes.includes(sellingType)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid selling type. Use FIXED or WEIGHT",
+            });
+        }
+
+        const allowedUnits = {
+            FIXED: ["pcs", "packet", "box", "bottle", "dozen"],
+            WEIGHT: ["kg", "litre"],
+        };
+
+        if (!allowedUnits[sellingType].includes(unit.toLowerCase())) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid unit for ${sellingType} product`,
+            });
+        }
+
+        const numericFields = {
+            purchasePrice: Number(purchasePrice),
+            sellingPrice: Number(sellingPrice),
+            gstRate: Number(gstRate ?? 0),
+            stock: Number(stock ?? 0),
+            lowStockLimit: Number(lowStockLimit ?? 5),
+        };
+
+        if (
+            Object.values(numericFields).some(value => !Number.isFinite(value)) ||
+            numericFields.purchasePrice < 0 ||
+            numericFields.sellingPrice < 0 ||
+            numericFields.gstRate < 0 ||
+            numericFields.gstRate > 100 ||
+            numericFields.stock < 0 ||
+            numericFields.lowStockLimit < 0
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Please provide valid numeric values",
             });
         }
 
         const ownerId = req.owner._id;
 
-        const shop = await Shop.findOne({
-            ownerId,
-        });
+        const shop = await Shop.findOne({ ownerId });
 
         if (!shop) {
             return res.status(404).json({
@@ -32,33 +85,29 @@ export const createProduct = async (req, res) => {
         }
 
         if (sku) {
-            const existingSku =
-                await Product.findOne({
-                    shopId: shop._id,
-                    sku: sku.trim().toUpperCase(),
-                });
+            const existingSku = await Product.findOne({
+                shopId: shop._id,
+                sku: sku.trim().toUpperCase(),
+            });
 
             if (existingSku) {
                 return res.status(409).json({
                     success: false,
-                    message:
-                        "Product with this SKU already exists",
+                    message: "Product with this SKU already exists",
                 });
             }
         }
 
         if (barcode) {
-            const existingBarcode =
-                await Product.findOne({
-                    shopId: shop._id,
-                    barcode: barcode.trim(),
-                });
+            const existingBarcode = await Product.findOne({
+                shopId: shop._id,
+                barcode: barcode.trim(),
+            });
 
             if (existingBarcode) {
                 return res.status(409).json({
                     success: false,
-                    message:
-                        "Product with this barcode already exists",
+                    message: "Product with this barcode already exists",
                 });
             }
         }
@@ -69,52 +118,35 @@ export const createProduct = async (req, res) => {
 
             name: name.trim(),
 
-            sku: sku
-                ? sku.trim().toUpperCase()
-                : undefined,
-
-            barcode: barcode?.trim(),
-
+            sku: sku?.trim().toUpperCase() || undefined,
+            barcode: barcode?.trim() || undefined,
             category: category?.trim(),
 
-            unit: unit || "pcs",
+            sellingType,
+            unit: unit.toLowerCase(),
 
-            purchasePrice: Number(
-                purchasePrice
-            ),
+            purchasePrice: numericFields.purchasePrice,
+            sellingPrice: numericFields.sellingPrice,
+            gstRate: numericFields.gstRate,
 
-            sellingPrice: Number(
-                sellingPrice
-            ),
-
-            gstRate: Number(gstRate || 0),
-
-            stock: Number(stock || 0),
-
-            lowStockLimit: Number(
-                lowStockLimit || 5
-            ),
+            stock: numericFields.stock,
+            lowStockLimit: numericFields.lowStockLimit,
         });
 
         return res.status(201).json({
             success: true,
             message: "Product created successfully",
-
             data: {
                 product,
             },
         });
 
     } catch (error) {
-        console.error(
-            "Create Product Error:",
-            error
-        );
+        console.error("Create Product Error:", error);
 
         return res.status(500).json({
             success: false,
-            message:
-                "Server error while creating product",
+            message: "Server error while creating product",
         });
     }
 };

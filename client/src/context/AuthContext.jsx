@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }) => {
         const billingRes = await authService.getBillingProfile();
         if (billingRes.success && billingRes.data?.billingAccount) {
           setUser(billingRes.data.billingAccount);
-          setRole('billing');
+          setRole('cashier');
           setShop(null);
           setLoading(false);
           return;
@@ -81,7 +81,7 @@ export const AuthProvider = ({ children }) => {
     const res = await authService.loginBilling(billingCode, password);
     if (res.success && res.data?.billingAccount) {
       setUser(res.data.billingAccount);
-      setRole('billing');
+      setRole('cashier');
       setShop(null);
     }
     return res;
@@ -129,7 +129,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         isAuthenticated: Boolean(user),
         isOwner: role === 'owner',
-        isBilling: role === 'billing',
+        isBilling: role === 'cashier',
         loginOwner,
         loginBilling,
         registerOwner,

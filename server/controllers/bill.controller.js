@@ -463,34 +463,35 @@ export const getBillingBillById = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Validate BillingAccount ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({ success: false, message: "Invalid bill ID" });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid Billing Account ID",
+            });
         }
 
-        // req.billingAccount guaranteed by billingAuthMiddleware
-        const bill = await Bill.findOne({
-            _id: id,
-            billingAccountId: req.billingAccount._id,
-        }).populate("items.productId", "name sku barcode");
+        // Find BillingAccount by ID
+        const billingAccount = await BillingAccount.findById(id);
 
-        if (!bill) {
+        if (!billingAccount) {
             return res.status(404).json({
                 success: false,
-                message: "Bill not found",
+                message: "Billing Account not found",
             });
         }
 
         return res.status(200).json({
             success: true,
-            data: { bill },
+            data: { billingAccount },
         });
 
     } catch (error) {
-        console.error("Get Billing Bill Error:", error);
+        console.error("Get Billing Account Error:", error);
 
         return res.status(500).json({
             success: false,
-            message: "Server error while fetching bill",
+            message: "Server error while fetching billing account",
         });
     }
 };

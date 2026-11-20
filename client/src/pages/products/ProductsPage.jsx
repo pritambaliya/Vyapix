@@ -482,8 +482,6 @@ export const ProductsPage = () => {
             />
           </div>
         ) : products.length === 0 ? (
- 
-
           <div className="px-4 py-12">
             <EmptyState
               icon={Package}
@@ -557,8 +555,6 @@ export const ProductsPage = () => {
                       className="group transition-colors hover:bg-orange-50/40"
                     >
 
-                      {/* PRODUCT DETAILS */}
-
                       <td className="px-4 py-3.5">
 
                         <div className="flex items-center gap-3">
@@ -606,8 +602,6 @@ export const ProductsPage = () => {
                         </span>
                       </td>
 
-                      {/* COST PRICE */}
-
                       {isOwner && (
                         <td className="whitespace-nowrap px-4 py-3.5 text-sm font-medium text-slate-600">
                           {product.purchasePrice !== undefined &&
@@ -634,8 +628,6 @@ export const ProductsPage = () => {
                           {product.gstRate ?? 0}%
                         </span>
                       </td>
-
-                      {/* STOCK */}
 
                       <td className="whitespace-nowrap px-4 py-3.5">
 

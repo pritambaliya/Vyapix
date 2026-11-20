@@ -38,6 +38,12 @@ const productSchema = new mongoose.Schema(
             trim: true,
         },
 
+        sellingType: {
+            type: String,
+            enum: ["FIXED", "WEIGHT"],
+            default: "FIXED",
+        },
+
         unit: {
             type: String,
             default: "pcs",

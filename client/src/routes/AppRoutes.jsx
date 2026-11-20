@@ -187,7 +187,7 @@ const AppRoutes = () => {
           path="/profile"
           element={
             <ProtectedRoute allowedRoles={["owner", "cashier"]}>
-              <ProfilePage />
+               <ProfilePage />
             </ProtectedRoute>
           }
         />

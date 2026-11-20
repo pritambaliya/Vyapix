@@ -1,19 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  FileText,
-  Download,
-  Printer,
-  Eye,
-  RotateCcw,
-  Search,
-  ReceiptText,
-  CircleDollarSign,
-  ShoppingBag,
-  CheckCircle2,
-  Filter,
-  Plus,
-} from 'lucide-react';
+import {FileText, Download, Printer, Eye, RotateCcw, Search, ReceiptText, CircleDollarSign, ShoppingBag, CheckCircle2, Filter, Plus} from 'lucide-react';
 
 import Button from '../../Components/common/Button';
 import Badge from '../../Components/common/Badge';
