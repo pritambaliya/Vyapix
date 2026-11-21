@@ -1,7 +1,9 @@
 ﻿import express from "express";
+
 import {
     createProduct,
     getProducts,
+    getProductById,
     getProductByBarcode,
     addStock,
     removeStock,
@@ -9,6 +11,7 @@ import {
     updateProduct,
     deleteProduct
 } from "../controllers/product.controller.js";
+
 import authMiddleware from "../middleware/auth.middleware.js";
 import billingAuthMiddleware from "../middleware/billingAuth.middleware.js";
 
@@ -24,6 +27,12 @@ router.get(
     "/owner",
     authMiddleware,
     getProducts
+);
+
+router.get(
+    "/owner/:id",
+    authMiddleware,
+    getProductById
 );
 
 router.patch(
