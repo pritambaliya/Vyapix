@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import Bill from "../models/bill.model.js";
-import Product from "../models/product.model.js";
+import Product from "../models/ProductModel/product.model.js";
 import Shop from "../models/shop.model.js";
 import InventoryActivity from "../models/inventoryActivity.model.js";
 import BillingActivity from "../models/billingActivity.model.js";

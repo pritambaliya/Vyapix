@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { PlusCircle, MinusCircle, SlidersHorizontal, Package, ArrowRight, AlertCircle } from 'lucide-react';
+import {
+  PlusCircle,
+  MinusCircle,
+  SlidersHorizontal,
+  Package,
+  ArrowRight,
+  AlertCircle,
+} from 'lucide-react';
 
 import Modal from '../common/Modal';
 import Input from '../common/Input';
@@ -16,20 +23,61 @@ export const StockAdjustModal = ({
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [selectedVariantId, setSelectedVariantId] = useState('');
+
+  const isVariantProduct = product?.sellingType === 'VARIANT';
+
+  const activeVariants = (product?.variants || []).filter(
+    (variant) => variant.isActive !== false
+  );
+
+  const selectedVariant = activeVariants.find(
+    (variant) =>
+      String(variant._id) === String(selectedVariantId)
+  );
+
+  // ------------------------------------------
+  // RESET FORM
+  // ------------------------------------------
 
   useEffect(() => {
-    if (isOpen) {
-      setMode('add');
-      setQuantity('');
-      setReason('');
-      setErrorMsg('');
-    }
+    if (!isOpen) return;
+
+    setMode('add');
+    setQuantity('');
+    setReason('');
+    setErrorMsg('');
+
+    const firstVariant = (product?.variants || []).find(
+      (variant) => variant.isActive !== false
+    );
+
+    setSelectedVariantId(
+      product?.sellingType === 'VARIANT'
+        ? firstVariant?._id || ''
+        : ''
+    );
   }, [isOpen, product?._id, product?.id]);
 
-  if (!isOpen || !product) return null;
+  // ------------------------------------------
+  // STOCK INFORMATION
+  // ------------------------------------------
 
-  const currentStock = Math.max(0, Number(product.stock) || 0);
+  const currentStock = Math.max(
+    0,
+    Number(
+      isVariantProduct
+        ? selectedVariant?.stock
+        : product?.stock
+    ) || 0
+  );
+
+  const unit = isVariantProduct
+    ? selectedVariant?.unit || 'pcs'
+    : product?.unit || 'pcs';
+
   const numQuantity = Number(quantity);
+
   const validQuantity =
     quantity.trim() !== '' &&
     Number.isFinite(numQuantity) &&
@@ -41,15 +89,51 @@ export const StockAdjustModal = ({
       : currentStock - numQuantity
     : currentStock;
 
+  const insufficientStock =
+    mode === 'remove' &&
+    validQuantity &&
+    numQuantity > currentStock;
+
+  const hasNoVariants =
+    isVariantProduct && activeVariants.length === 0;
+
+  // ------------------------------------------
+  // MODE CHANGE
+  // ------------------------------------------
+
   const handleModeChange = (nextMode) => {
     setMode(nextMode);
     setErrorMsg('');
   };
 
+  // ------------------------------------------
+  // VARIANT CHANGE
+  // ------------------------------------------
+
+  const handleVariantChange = (e) => {
+    setSelectedVariantId(e.target.value);
+    setQuantity('');
+    setErrorMsg('');
+  };
+
+  // ------------------------------------------
+  // SUBMIT
+  // ------------------------------------------
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (loading) return;
+
+    if (hasNoVariants) {
+      setErrorMsg('No active variants are available for this product.');
+      return;
+    }
+
+    if (isVariantProduct && !selectedVariant) {
+      setErrorMsg('Please select a product variant.');
+      return;
+    }
 
     if (!validQuantity) {
       setErrorMsg('Please enter a valid quantity greater than 0.');
@@ -58,9 +142,7 @@ export const StockAdjustModal = ({
 
     if (mode === 'remove' && numQuantity > currentStock) {
       setErrorMsg(
-        `Insufficient stock. You currently have ${currentStock} ${
-          product.unit || 'pcs'
-        }.`
+        `Insufficient stock. You currently have ${currentStock} ${unit}.`
       );
       return;
     }
@@ -70,15 +152,22 @@ export const StockAdjustModal = ({
       return;
     }
 
+    const payload = {
+      productId: product._id || product.id,
+      mode,
+      quantity: numQuantity,
+      reason: reason.trim(),
+
+      // Only send variantId for VARIANT products.
+      ...(isVariantProduct && {
+        variantId: selectedVariant._id,
+      }),
+    };
+
     setErrorMsg('');
 
     try {
-      await onAdjust({
-        productId: product._id || product.id,
-        mode,
-        quantity: numQuantity,
-        reason: reason.trim(),
-      });
+      await onAdjust(payload);
     } catch (error) {
       setErrorMsg(
         error?.response?.data?.message ||
@@ -88,7 +177,14 @@ export const StockAdjustModal = ({
     }
   };
 
+  if (!isOpen || !product) return null;
+
   const isAdd = mode === 'add';
+
+  const productName =
+    product.brandProductId?.name ||
+    product.name ||
+    'Product';
 
   return (
     <Modal
@@ -113,7 +209,11 @@ export const StockAdjustModal = ({
             size="sm"
             onClick={handleSubmit}
             loading={loading}
-            disabled={loading}
+            disabled={
+              loading ||
+              hasNoVariants ||
+              (isVariantProduct && !selectedVariant)
+            }
           >
             {isAdd ? 'Add Stock' : 'Deduct Stock'}
           </Button>
@@ -121,7 +221,9 @@ export const StockAdjustModal = ({
       }
     >
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Product Information */}
+
+        {/* PRODUCT INFORMATION */}
+
         <div className="flex items-center gap-3 rounded-xl border border-orange-100 bg-orange-50/70 p-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-orange-600 shadow-sm">
             <Package className="h-5 w-5" />
@@ -129,22 +231,91 @@ export const StockAdjustModal = ({
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-slate-800">
-              {product.name}
+              {productName}
             </p>
 
             <p className="mt-0.5 text-xs text-slate-500">
-              Inventory adjustment
+              {isVariantProduct
+                ? 'Variant inventory adjustment'
+                : 'Loose product inventory adjustment'}
             </p>
           </div>
 
-          <div className="rounded-lg border border-orange-100 bg-white px-2.5 py-1.5">
-            <span className="text-xs font-semibold text-orange-700">
-              {currentStock} {product.unit || 'pcs'}
-            </span>
-          </div>
+          {!isVariantProduct && (
+            <div className="rounded-lg border border-orange-100 bg-white px-2.5 py-1.5">
+              <span className="text-xs font-semibold text-orange-700">
+                {currentStock} {unit}
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Mode Selector */}
+        {/* VARIANT SELECTOR */}
+
+        {isVariantProduct && (
+          <div>
+            <label
+              htmlFor="stock-adjust-variant"
+              className="mb-1.5 block text-xs font-semibold text-slate-700"
+            >
+              Select Variant <span className="text-red-500">*</span>
+            </label>
+
+            <select
+              id="stock-adjust-variant"
+              value={selectedVariantId}
+              onChange={handleVariantChange}
+              disabled={loading || hasNoVariants}
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+            >
+              <option value="">Select a variant</option>
+
+              {activeVariants.map((variant) => (
+                <option
+                  key={variant._id}
+                  value={variant._id}
+                >
+                  {variant.variantName} — {variant.stock || 0} {variant.unit || 'pcs'}
+                </option>
+              ))}
+            </select>
+
+            {hasNoVariants && (
+              <p className="mt-1.5 text-xs text-red-500">
+                This product has no active variants.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* SELECTED VARIANT STOCK */}
+
+        {isVariantProduct && selectedVariant && (
+          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <div>
+              <p className="text-xs text-slate-500">
+                Selected Variant
+              </p>
+
+              <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                {selectedVariant.variantName}
+              </p>
+            </div>
+
+            <div className="text-right">
+              <p className="text-xs text-slate-500">
+                Available Stock
+              </p>
+
+              <p className="mt-0.5 text-sm font-bold text-orange-600">
+                {currentStock} {unit}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* MODE SELECTOR */}
+
         <div>
           <label className="mb-2 block text-xs font-semibold text-slate-700">
             Adjustment Type
@@ -183,12 +354,13 @@ export const StockAdjustModal = ({
           </div>
         </div>
 
-        {/* Quantity Input */}
+        {/* QUANTITY INPUT */}
+
         <Input
-          label={`Quantity (${product.unit || 'pcs'})`}
+          label={`Quantity (${unit})`}
           name="quantity"
           type="number"
-          min="0.01"
+          min="0.001"
           step="any"
           placeholder="Enter quantity"
           value={quantity}
@@ -198,10 +370,11 @@ export const StockAdjustModal = ({
           }}
           required
           autoFocus
-          disabled={loading}
+          disabled={loading || (isVariantProduct && !selectedVariant)}
         />
 
-        {/* Stock Preview */}
+        {/* STOCK PREVIEW */}
+
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="mb-3 flex items-center gap-2">
             <SlidersHorizontal className="h-4 w-4 text-orange-500" />
@@ -213,7 +386,9 @@ export const StockAdjustModal = ({
 
           <div className="flex items-center justify-between gap-2">
             <div className="flex-1 rounded-lg bg-slate-50 p-3 text-center">
-              <p className="text-[11px] text-slate-500">Current</p>
+              <p className="text-[11px] text-slate-500">
+                Current
+              </p>
 
               <p className="mt-1 text-lg font-bold text-slate-800">
                 {currentStock}
@@ -224,21 +399,23 @@ export const StockAdjustModal = ({
 
             <div
               className={`flex-1 rounded-lg p-3 text-center ${
-                validQuantity && projectedStock >= 0
+                validQuantity && !insufficientStock
                   ? 'bg-orange-50'
                   : 'bg-slate-50'
               }`}
             >
-              <p className="text-[11px] text-slate-500">After Adjustment</p>
+              <p className="text-[11px] text-slate-500">
+                After Adjustment
+              </p>
 
               <p
                 className={`mt-1 text-lg font-bold ${
-                  validQuantity && projectedStock >= 0
+                  validQuantity && !insufficientStock
                     ? 'text-orange-600'
                     : 'text-slate-800'
                 }`}
               >
-                {projectedStock < 0 ? '—' : projectedStock}
+                {insufficientStock ? '—' : projectedStock}
               </p>
             </div>
           </div>
@@ -247,14 +424,22 @@ export const StockAdjustModal = ({
             <p className="mt-3 text-center text-xs text-slate-500">
               {isAdd ? 'Adding' : 'Removing'}{' '}
               <span className="font-semibold text-orange-600">
-                {numQuantity} {product.unit || 'pcs'}
+                {numQuantity} {unit}
               </span>
+
               {isAdd ? ' to inventory' : ' from inventory'}
+            </p>
+          )}
+
+          {insufficientStock && (
+            <p className="mt-2 text-center text-xs font-medium text-red-500">
+              Not enough stock available.
             </p>
           )}
         </div>
 
-        {/* Reason */}
+        {/* REASON */}
+
         <div>
           <label
             htmlFor="stock-adjustment-reason"
@@ -288,7 +473,8 @@ export const StockAdjustModal = ({
           </p>
         </div>
 
-        {/* Validation Error */}
+        {/* VALIDATION ERROR */}
+
         {errorMsg && (
           <div
             role="alert"
@@ -301,6 +487,7 @@ export const StockAdjustModal = ({
             </p>
           </div>
         )}
+
       </form>
     </Modal>
   );

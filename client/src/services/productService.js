@@ -1,77 +1,155 @@
 import api from './api';
 
-export const productService = {
-  /**
-   * Get products for Store Owner (includes purchase prices)
-   */
+const productService = {
+
+  async getCategories(params = {}) {
+    const response = await api.get('/categories', { params });
+    return response.data;
+  },
+
+  async getCategoryById(id) {
+    const response = await api.get(`/categories/${id}`);
+    return response.data;
+  },
+
+  async createCategory(data) {
+    const response = await api.post('/categories', data);
+    return response.data;
+  },
+
+  async updateCategory(id, data) {
+    const response = await api.patch(`/categories/${id}`, data);
+    return response.data;
+  },
+
+  async deleteCategory(id) {
+    const response = await api.delete(`/categories/${id}`);
+    return response.data;
+  },
+
+  async getMainProducts(params = {}) {
+    const response = await api.get('/main-products', { params });
+    return response.data;
+  },
+
+  async getMainProductById(id) {
+    const response = await api.get(`/main-products/${id}`);
+    return response.data;
+  },
+
+  async createMainProduct(data) {
+    const response = await api.post('/main-products', data);
+    return response.data;
+  },
+
+  async updateMainProduct(id, data) {
+    const response = await api.patch(`/main-products/${id}`, data);
+    return response.data;
+  },
+
+  async deleteMainProduct(id) {
+    const response = await api.delete(`/main-products/${id}`);
+    return response.data;
+  },
+
+  async getBrandProducts(params = {}) {
+    const response = await api.get('/brand-products', { params });
+    return response.data;
+  },
+
+  async getBrandProductById(id) {
+    const response = await api.get(`/brand-products/${id}`);
+    return response.data;
+  },
+
+  async createBrandProduct(data) {
+    const response = await api.post('/brand-products', data);
+    return response.data;
+  },
+
+  async updateBrandProduct(id, data) {
+    const response = await api.patch(`/brand-products/${id}`, data);
+    return response.data;
+  },
+
+  async deleteBrandProduct(id) {
+    const response = await api.delete(`/brand-products/${id}`);
+    return response.data;
+  },
+
   async getOwnerProducts(params = {}) {
     const response = await api.get('/products/owner', { params });
     return response.data;
   },
 
-  /**
-   * Get products for Billing Operator (excludes purchase prices)
-   */
-  async getBillingProducts(params = {}) {
-    const response = await api.get('/products/billing', { params });
+  async getProductById(id) {
+    const response = await api.get(`/products/owner/${id}`);
     return response.data;
   },
 
-  /**
-   * Look up a single product by barcode (POS quick scan)
-   */
-  async getProductByBarcode(barcode) {
-    const response = await api.get(`/products/billing/barcode/${encodeURIComponent(barcode)}`);
-    return response.data;
-  },
-
-  /**
-   * Create a new product in the catalog
-   */
   async createProduct(data) {
     const response = await api.post('/products', data);
     return response.data;
   },
 
-  /**
-   * Update existing product details and pricing
-   */
   async updateProduct(id, data) {
     const response = await api.patch(`/products/${id}`, data);
     return response.data;
   },
 
-  /**
-   * Delete product (soft delete)
-   */
   async deleteProduct(id) {
     const response = await api.delete(`/products/${id}`);
     return response.data;
   },
 
-  /**
-   * Add stock with audit reason
-   */
-  async addStock(id, { quantity, reason }) {
-    const response = await api.patch(`/products/${id}/add-stock`, { quantity, reason });
+  async addStock(id, { quantity, reason, variantId }) {
+    const response = await api.patch(
+      `/products/${id}/add-stock`,
+      {
+        quantity,
+        reason,
+        variantId,
+      }
+    );
+
     return response.data;
   },
 
-  /**
-   * Remove/deduct stock with audit reason
-   */
-  async removeStock(id, { quantity, reason }) {
-    const response = await api.patch(`/products/${id}/remove-stock`, { quantity, reason });
+  async removeStock(id, { quantity, reason, variantId }) {
+    const response = await api.patch(
+      `/products/${id}/remove-stock`,
+      {
+        quantity,
+        reason,
+        variantId,
+      }
+    );
+
     return response.data;
   },
 
-  /**
-   * Get stock movement audit history for a product
-   */
-  async getInventoryHistory(id) {
-    const response = await api.get(`/products/${id}/inventory-history`);
+  async getInventoryHistory(id, params = {}) {
+    const response = await api.get(
+      `/products/${id}/inventory-history`,
+      { params }
+    );
+
+    return response.data;
+  },
+
+  async getBillingProducts(params = {}) {
+    const response = await api.get('/products/billing', { params });
+    return response.data;
+  },
+
+  async getProductByBarcode(barcode) {
+    const response = await api.get(
+      `/products/billing/barcode/${encodeURIComponent(barcode)}`
+    );
+
     return response.data;
   },
 };
 
+export { productService };
 export default productService;

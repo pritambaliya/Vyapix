@@ -1,13 +1,6 @@
 import jwt from "jsonwebtoken";
 import BillingAccount from "../models/billingAccount.model.js";
 
-/**
- * Middleware that authenticates a cashier / billing-account request.
- * Reads the `billingToken` HttpOnly cookie, verifies it with BILLING_JWT_SECRET,
- * and populates:
- *   req.billingAccount  — the full BillingAccount document (passwordHash excluded)
- *   req.user            — { id, role: "cashier" }  (compatible with authorize())
- */
 const billingAuthMiddleware = async (req, res, next) => {
     try {
         const token = req.cookies.billingToken;
@@ -40,7 +33,6 @@ const billingAuthMiddleware = async (req, res, next) => {
         }
 
         req.billingAccount = account;
-        // Populate req.user so authorize() can check roles uniformly
         req.user = { id: account._id, role: "cashier" };
 
         next();

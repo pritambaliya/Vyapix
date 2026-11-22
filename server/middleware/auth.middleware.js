@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import Owner from "../models/owner.model.js";
+import Shop from "../models/shop.model.js";
 
 const authMiddleware = async (req, res, next) => {
     try {
@@ -14,9 +15,7 @@ const authMiddleware = async (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        const owner = await Owner.findById(decoded.ownerId).select(
-            "-password"
-        );
+        const owner = await Owner.findById(decoded.ownerId).select("-password");
 
         if (!owner) {
             return res.status(401).json({
@@ -25,9 +24,24 @@ const authMiddleware = async (req, res, next) => {
             });
         }
 
-        req.owner = owner;
+        const shop = await Shop.findOne({
+            ownerId: owner._id
+        });
 
-        req.user = { id: owner._id, role: "owner" };
+        if (!shop) {
+            return res.status(404).json({
+                success: false,
+                message: "Shop not found. Please create your shop first."
+            });
+        }
+
+        req.owner = owner;
+        req.shop = shop;
+
+        req.user = {
+            id: owner._id,
+            role: "owner"
+        };
 
         next();
     } catch (error) {

@@ -188,12 +188,13 @@ const productSchema = new mongoose.Schema(
     }
 );
 
-
 productSchema.index(
     { shopId: 1, sku: 1 },
     {
         unique: true,
-        sparse: true,
+        partialFilterExpression: {
+            sku: { $type: "string", $gt: "" }
+        }
     }
 );
 
@@ -201,7 +202,9 @@ productSchema.index(
     { shopId: 1, barcode: 1 },
     {
         unique: true,
-        sparse: true,
+        partialFilterExpression: {
+            barcode: { $type: "string", $gt: "" }
+        }
     }
 );
 

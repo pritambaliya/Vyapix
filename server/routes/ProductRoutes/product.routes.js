@@ -1,19 +1,7 @@
 ﻿import express from "express";
-
-import {
-    createProduct,
-    getProducts,
-    getProductById,
-    getProductByBarcode,
-    addStock,
-    removeStock,
-    getInventoryHistory,
-    updateProduct,
-    deleteProduct
-} from "../controllers/product.controller.js";
-
-import authMiddleware from "../middleware/auth.middleware.js";
-import billingAuthMiddleware from "../middleware/billingAuth.middleware.js";
+import {createProduct, getProducts, getProductById, getProductByBarcode, addStock, removeStock, getInventoryHistory, updateProduct, deleteProduct} from "../../controllers/ProductController/product.controller.js";
+import authMiddleware from "../../middleware/auth.middleware.js";
+import billingAuthMiddleware from "../../middleware/billingAuth.middleware.js";
 
 const router = express.Router();
 

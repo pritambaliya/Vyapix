@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import BrandProduct from "../models/brandProduct.model.js";
-import MainProduct from "../models/mainProduct.model.js";
+import BrandProduct from "../../models/ProductModel/brandProduct.model.js";
+import MainProduct from "../../models/ProductModel/mainProduct.model.js";
 
 const getOwnerId = (req) => req.owner?._id || req.user?._id;
 
@@ -15,7 +15,7 @@ export const createBrandProduct = async (req, res) => {
             });
         }
 
-        const { mainProductId, brandName, name, image } = req.body;
+        const { mainProductId, brandName, name } = req.body;
 
         if (!mainProductId || !name?.trim()) {
             return res.status(400).json({
@@ -47,11 +47,35 @@ export const createBrandProduct = async (req, res) => {
             });
         }
 
+        let imageUrl = "";
+
+        if (req.file) {
+            const result = await new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: "vyapix/brand-products",
+                        resource_type: "image"
+                    },
+                    (error, result) => {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(result);
+                        }
+                    }
+                );
+
+                uploadStream.end(req.file.buffer);
+            });
+
+            imageUrl = result.secure_url;
+        }
+
         const brandProduct = await BrandProduct.create({
             mainProductId,
             brandName: brandName?.trim() || "Unbranded",
             name: name.trim(),
-            image: image || "",
+            image: imageUrl,
             ownerId
         });
 
