@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import MainProduct from "../../models/ProductModel/mainProduct.model.js";
 import Category from "../../models/ProductModel/category.model.js";
+import cloudinary from "../../config/clodanary.js";
+import uploadToCloudinary from "../../utils/uploadToCloudinary.js";
 
 const getOwnerId = (req) => req.owner?._id || req.user?._id;
 
@@ -52,25 +54,25 @@ export const createMainProduct = async (req, res) => {
         let imageUrl = "";
 
         if (req.file) {
-            const result = await new Promise((resolve, reject) => {
-                const uploadStream = cloudinary.uploader.upload_stream(
-                    {
-                        folder: "vyapix/main-products",
-                        resource_type: "image"
-                    },
-                    (error, result) => {
-                        if (error) {
-                            reject(error);
-                        } else {
-                            resolve(result);
-                        }
-                    }
+            try {
+                const result = await uploadToCloudinary(
+                    req.file.buffer,
+                    "vyapix/main-products"
                 );
 
-                uploadStream.end(req.file.buffer);
-            });
+                imageUrl = result.secure_url;
 
-            imageUrl = result.secure_url;
+                console.log("Main Product Image Uploaded:", imageUrl);
+
+            } catch (uploadError) {
+                console.error("Main Product Image Upload Error:", uploadError);
+
+                return res.status(502).json({
+                    success: false,
+                    message: "Image upload failed. Please try again.",
+                    error: uploadError.message
+                });
+            }
         }
 
         // Create Main Product
@@ -219,7 +221,6 @@ export const updateMainProduct = async (req, res) => {
     try {
         const ownerId = getOwnerId(req);
         const { id } = req.params;
-        const { categoryId, name, image } = req.body;
 
         if (!ownerId) {
             return res.status(401).json({
@@ -247,6 +248,8 @@ export const updateMainProduct = async (req, res) => {
                 message: "Custom main product not found"
             });
         }
+
+        const { categoryId, name } = req.body;
 
         // Update category if supplied
         if (categoryId !== undefined) {
@@ -276,6 +279,7 @@ export const updateMainProduct = async (req, res) => {
             mainProduct.categoryId = categoryId;
         }
 
+        // Update product name
         if (name !== undefined) {
             if (!name.trim()) {
                 return res.status(400).json({
@@ -287,8 +291,33 @@ export const updateMainProduct = async (req, res) => {
             mainProduct.name = name.trim();
         }
 
-        if (image !== undefined) {
-            mainProduct.image = image;
+        // Upload new image to Cloudinary
+        if (req.file) {
+            try {
+                const result = await uploadToCloudinary(
+                    req.file.buffer,
+                    "vyapix/main-products"
+                );
+
+                mainProduct.image = result.secure_url;
+
+                console.log(
+                    "Main Product Image Updated:",
+                    result.secure_url
+                );
+
+            } catch (uploadError) {
+                console.error(
+                    "Main Product Image Upload Error:",
+                    uploadError
+                );
+
+                return res.status(502).json({
+                    success: false,
+                    message: "Image upload failed. Please try again.",
+                    error: uploadError.message
+                });
+            }
         }
 
         await mainProduct.save();

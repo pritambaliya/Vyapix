@@ -23,6 +23,7 @@ const productService = {
   },
 
   async deleteCategory(id) {
+
     const response = await api.delete(`/categories/${id}`);
     return response.data;
   },
@@ -107,8 +108,8 @@ const productService = {
       `/products/${id}/add-stock`,
       {
         quantity,
-        reason,
-        variantId,
+        note: reason,
+        ...(variantId ? { variantId } : {}),
       }
     );
 
@@ -120,8 +121,8 @@ const productService = {
       `/products/${id}/remove-stock`,
       {
         quantity,
-        reason,
-        variantId,
+        note: reason,
+        ...(variantId ? { variantId } : {}),
       }
     );
 

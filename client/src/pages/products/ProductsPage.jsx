@@ -4,7 +4,7 @@ import React, {
   useCallback,
 } from 'react';
 
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Plus,
@@ -36,7 +36,41 @@ import {
   getProductName,
 } from '../../utils/productHelpers';
 
+// --------------------------------------------------
+// HELPERS
+// --------------------------------------------------
+
+const getErrorMessage = (err, fallback) =>
+  err?.response?.data?.message ||
+  err?.message ||
+  fallback;
+
+const getProductResponse = (response) => {
+  const root = response?.data || response;
+
+  const products =
+    root?.products ||
+    root?.data?.products ||
+    (Array.isArray(root) ? root : []);
+
+  const pagination =
+    root?.pagination ||
+    root?.data?.pagination ||
+    null;
+
+  return {
+    products: Array.isArray(products) ? products : [],
+    pagination,
+  };
+};
+
+// --------------------------------------------------
+// PRODUCTS PAGE
+// --------------------------------------------------
+
 export const ProductsPage = () => {
+  const navigate = useNavigate();
+
   const { isOwner } = useAuth();
   const { success, error } = useToast();
 
@@ -59,6 +93,10 @@ export const ProductsPage = () => {
     totalPages: 1,
   });
 
+  // --------------------------------------------------
+  // FILTERS
+  // --------------------------------------------------
+
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
 
@@ -69,7 +107,7 @@ export const ProductsPage = () => {
   const debouncedSearch = useDebounce(search, 300);
 
   // --------------------------------------------------
-  // PRODUCT MODAL
+  // EDIT PRODUCT MODAL
   // --------------------------------------------------
 
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -81,7 +119,13 @@ export const ProductsPage = () => {
   // --------------------------------------------------
 
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+
   const [stockProduct, setStockProduct] = useState(null);
+
+  // null = main product stock
+  // object = selected variant stock
+  const [stockVariant, setStockVariant] = useState(null);
+
   const [stockLoading, setStockLoading] = useState(false);
 
   // --------------------------------------------------
@@ -104,7 +148,10 @@ export const ProductsPage = () => {
   // --------------------------------------------------
 
   const fetchCategories = useCallback(async () => {
-    if (!isOwner) return;
+    if (!isOwner) {
+      setCategories([]);
+      return;
+    }
 
     setCategoriesLoading(true);
 
@@ -118,8 +165,7 @@ export const ProductsPage = () => {
 
       setCategories(categoryList);
     } catch (err) {
-      error(err.message || 'Failed to load categories');
-
+      error(getErrorMessage(err, 'Failed to load categories'));
       setCategories([]);
     } finally {
       setCategoriesLoading(false);
@@ -139,7 +185,7 @@ export const ProductsPage = () => {
 
     try {
       const params = {
-        search: debouncedSearch || undefined,
+        search: debouncedSearch.trim() || undefined,
         categoryId: categoryId || undefined,
         lowStock: lowStockOnly ? 'true' : undefined,
         page: pagination.page,
@@ -150,23 +196,24 @@ export const ProductsPage = () => {
         ? await productService.getOwnerProducts(params)
         : await productService.getBillingProducts(params);
 
-      if (response?.success && response?.data) {
-        const fetchedProducts = response.data.products || [];
+      const result = getProductResponse(response);
 
-        setProducts(fetchedProducts);
+      setProducts(result.products);
 
-        if (response.data.pagination) {
-          setPagination((previous) => ({
-            ...previous,
-            ...response.data.pagination,
-          }));
-        }
+      if (result.pagination) {
+        setPagination((previous) => ({
+          ...previous,
+          ...result.pagination,
+        }));
       } else {
-        setProducts([]);
+        setPagination((previous) => ({
+          ...previous,
+          total: result.products.length,
+          totalPages: 1,
+        }));
       }
     } catch (err) {
-      error(err.message || 'Failed to load products');
-
+      error(getErrorMessage(err, 'Failed to load products'));
       setProducts([]);
     } finally {
       setLoading(false);
@@ -232,15 +279,22 @@ export const ProductsPage = () => {
   };
 
   // --------------------------------------------------
-  // PRODUCT MODAL
+  // ADD PRODUCT
   // --------------------------------------------------
 
   const openAddProductModal = () => {
-    setSelectedProduct(null);
-    setIsProductModalOpen(true);
+    if (!isOwner) return;
+
+    navigate('/product/create');
   };
 
+  // --------------------------------------------------
+  // EDIT PRODUCT
+  // --------------------------------------------------
+
   const openEditProductModal = (product) => {
+    if (!product) return;
+
     setSelectedProduct(product);
     setIsProductModalOpen(true);
   };
@@ -270,30 +324,27 @@ export const ProductsPage = () => {
         success('Product added successfully');
       }
 
-      // Close modal after successful save.
       setIsProductModalOpen(false);
       setSelectedProduct(null);
 
-      // Refresh categories because the wizard
-      // can create a new category.
       await fetchCategories();
 
-      if (id) {
-        // Editing an existing product.
-        await fetchProducts();
-      } else if (pagination.page === 1) {
-        // Adding a product while already on page 1.
-        await fetchProducts();
-      } else {
-        // Adding a product from another page.
-        // Changing page triggers fetchProducts automatically.
+      if (!id && pagination.page !== 1) {
         setPagination((previous) => ({
           ...previous,
           page: 1,
         }));
+      } else {
+        await fetchProducts();
+      }
+
+      if (!id) {
+        navigate('/products', { replace: true });
       }
     } catch (err) {
-      error(err.message || 'Failed to save product');
+      error(
+        getErrorMessage(err, 'Failed to save product')
+      );
     } finally {
       setModalLoading(false);
     }
@@ -303,28 +354,70 @@ export const ProductsPage = () => {
   // STOCK ADJUSTMENT
   // --------------------------------------------------
 
+  // Main product stock adjustment
   const openStockModal = (product) => {
+    if (!product) return;
+
     setStockProduct(product);
+    setStockVariant(null);
+
+    setIsStockModalOpen(true);
+  };
+
+  // Individual variant stock adjustment
+  const openVariantStockModal = (product, variant) => {
+    if (!product || !variant) return;
+
+    setStockProduct(product);
+    setStockVariant(variant);
+
     setIsStockModalOpen(true);
   };
 
   const closeStockModal = () => {
+    if (stockLoading) return;
+
     setIsStockModalOpen(false);
     setStockProduct(null);
+    setStockVariant(null);
   };
 
-  const handleStockAdjust = async ({
-    productId,
-    variantId,
-    mode,
-    quantity,
-    reason,
-  }) => {
+  // Save stock adjustment
+  const handleStockAdjust = async (payload) => {
+    if (!stockProduct) {
+      error('Please select a product');
+      return;
+    }
+
+    const productId =
+      stockProduct._id || stockProduct.id;
+
+    const variantId =
+      stockVariant?._id ||
+      payload?.variantId ||
+      null;
+
+    const {
+      mode,
+      quantity,
+      reason,
+    } = payload || {};
+
+    if (!productId) {
+      error('Invalid product selected');
+      return;
+    }
+
+    if (!mode || !quantity || Number(quantity) <= 0) {
+      error('Please enter a valid stock quantity');
+      return;
+    }
+
     setStockLoading(true);
 
     try {
       const stockData = {
-        quantity,
+        quantity: Number(quantity),
         reason,
         ...(variantId ? { variantId } : {}),
       };
@@ -332,18 +425,33 @@ export const ProductsPage = () => {
       if (mode === 'add') {
         await productService.addStock(productId, stockData);
 
-        success(`Added ${quantity} units to stock`);
-      } else {
+        success(
+          variantId
+            ? 'Variant stock added successfully'
+            : 'Product stock added successfully'
+        );
+      } else if (mode === 'remove') {
         await productService.removeStock(productId, stockData);
 
-        success(`Deducted ${quantity} units from stock`);
+        success(
+          variantId
+            ? 'Variant stock deducted successfully'
+            : 'Product stock deducted successfully'
+        );
+      } else {
+        error('Invalid stock adjustment mode');
+        return;
       }
 
-      closeStockModal();
+      setIsStockModalOpen(false);
+      setStockProduct(null);
+      setStockVariant(null);
 
       await fetchProducts();
     } catch (err) {
-      error(err.message || 'Stock adjustment failed');
+      error(
+        getErrorMessage(err, 'Stock adjustment failed')
+      );
     } finally {
       setStockLoading(false);
     }
@@ -354,7 +462,11 @@ export const ProductsPage = () => {
   // --------------------------------------------------
 
   const openHistory = (product) => {
-    setHistoryProductId(product._id || product.id);
+    const productId = product?._id || product?.id;
+
+    if (!productId) return;
+
+    setHistoryProductId(productId);
     setIsHistoryOpen(true);
   };
 
@@ -382,12 +494,17 @@ export const ProductsPage = () => {
   const handleConfirmDelete = async () => {
     if (!productToDelete) return;
 
+    const productId =
+      productToDelete._id || productToDelete.id;
+
+    if (!productId) {
+      error('Invalid product selected');
+      return;
+    }
+
     setDeleteLoading(true);
 
     try {
-      const productId =
-        productToDelete._id || productToDelete.id;
-
       await productService.deleteProduct(productId);
 
       success('Product removed from active catalog');
@@ -395,9 +512,18 @@ export const ProductsPage = () => {
       setDeleteModalOpen(false);
       setProductToDelete(null);
 
-      await fetchProducts();
+      if (products.length === 1 && pagination.page > 1) {
+        setPagination((previous) => ({
+          ...previous,
+          page: previous.page - 1,
+        }));
+      } else {
+        await fetchProducts();
+      }
     } catch (err) {
-      error(err.message || 'Failed to delete product');
+      error(
+        getErrorMessage(err, 'Failed to delete product')
+      );
     } finally {
       setDeleteLoading(false);
     }
@@ -485,6 +611,8 @@ export const ProductsPage = () => {
 
         </div>
 
+        {/* TABLE CONTENT */}
+
         {loading ? (
           <div className="p-4">
             <TableSkeleton
@@ -496,7 +624,13 @@ export const ProductsPage = () => {
           <ProductTable
             products={products}
             isOwner={isOwner}
+
+            // Main product stock
             onAdjustStock={openStockModal}
+
+            // Individual variant stock
+            onAdjustVariantStock={openVariantStockModal}
+
             onViewHistory={openHistory}
             onEdit={openEditProductModal}
             onDelete={openDeleteModal}
@@ -509,6 +643,7 @@ export const ProductsPage = () => {
         {/* PAGINATION */}
 
         <div className="border-t border-orange-100 bg-white px-4 py-2">
+
           <Pagination
             currentPage={pagination.page}
             totalPages={pagination.totalPages}
@@ -521,27 +656,31 @@ export const ProductsPage = () => {
               }));
             }}
           />
+
         </div>
 
       </div>
 
-      {/* ADD / EDIT PRODUCT */}
+      {/* EDIT PRODUCT MODAL */}
 
-      <ProductModal
-        isOpen={isProductModalOpen}
-        onClose={closeProductModal}
-        onSave={handleSaveProduct}
-        product={selectedProduct}
-        loading={modalLoading}
-      />
+      {isProductModalOpen && selectedProduct && (
+        <ProductModal
+          isOpen={isProductModalOpen}
+          onClose={closeProductModal}
+          onSave={handleSaveProduct}
+          product={selectedProduct}
+          loading={modalLoading}
+        />
+      )}
 
-      {/* STOCK ADJUSTMENT */}
+      {/* STOCK ADJUSTMENT MODAL */}
 
       <StockAdjustModal
         isOpen={isStockModalOpen}
         onClose={closeStockModal}
         onAdjust={handleStockAdjust}
         product={stockProduct}
+        variant={stockVariant}
         loading={stockLoading}
       />
 

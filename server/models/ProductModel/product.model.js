@@ -113,15 +113,11 @@ const productSchema = new mongoose.Schema(
             required: true,
         },
 
-        // Selling configuration
-
         sellingType: {
             type: String,
             enum: ["LOOSE", "VARIANT"],
             required: true,
         },
-
-        // LOOSE PRODUCT FIELDS
 
         unit: {
             type: String,

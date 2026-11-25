@@ -7,16 +7,22 @@ import AppLayout from "../Components/layout/AppLayout";
 import HomePage from "../pages/public/HomePage";
 import AboutUsPage from "../pages/public/AboutUsPage";
 import ContactUsPage from "../pages/public/ContactUsPage";
+
 import LoginPage from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
+
 import FeatureDetails from "../pages/feature/FeatureDetails";
 import SolutionDetails from "../pages/solution/SolutionDetails";
 import PricingPage from "../pages/pricing/PricingPage";
+
 import DashboardPage from "../pages/dashboard/DashboardPage";
 import PosBillingPage from "../pages/billing/PosBillingPage";
 import ProductsPage from "../pages/products/ProductsPage";
+import ProductCreatePage from "../pages/products/ProductCreatePage";
+
 import InvoiceDetailPage from "../pages/invoices/InvoiceDetailPage";
 import InvoicesPage from "../pages/invoices/InvoicesPage";
+
 import SubAccountsPage from "../pages/accounts/SubAccountsPage";
 import ActivityPage from "../pages/activity/ActivityPage";
 import ProfilePage from "../pages/profile/ProfilePage";
@@ -80,14 +86,21 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
+
 const AppRoutes = () => {
   return (
     <Routes>
+
+      {/* ================= PUBLIC ROUTES ================= */}
+
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/about" element={<AboutUsPage />} />
         <Route path="/contact" element={<ContactUsPage />} />
       </Route>
+
+
+      {/* ================= AUTH ROUTES ================= */}
 
       <Route
         path="/login"
@@ -107,6 +120,9 @@ const AppRoutes = () => {
         }
       />
 
+
+      {/* ================= OTHER PUBLIC ROUTES ================= */}
+
       <Route
         path="/features/:featureName"
         element={<FeatureDetails />}
@@ -119,7 +135,13 @@ const AppRoutes = () => {
 
       <Route path="/pricing" element={<PricingPage />} />
 
+
+      {/* ================= PROTECTED APP ROUTES ================= */}
+
       <Route element={<AppLayout />}>
+
+        {/* DASHBOARD */}
+
         <Route
           path="/dashboard"
           element={
@@ -128,6 +150,9 @@ const AppRoutes = () => {
             </ProtectedRoute>
           }
         />
+
+
+        {/* BILLING */}
 
         <Route
           path="/billing"
@@ -138,6 +163,9 @@ const AppRoutes = () => {
           }
         />
 
+
+        {/* PRODUCTS LIST */}
+
         <Route
           path="/products"
           element={
@@ -146,6 +174,65 @@ const AppRoutes = () => {
             </ProtectedRoute>
           }
         />
+
+
+        {/* ================= PRODUCT CREATION FLOW ================= */}
+
+        <Route
+          path="/product/create"
+          element={
+            <ProtectedRoute allowedRoles={["owner"]}>
+              <ProductCreatePage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Selected Category */}
+
+        <Route
+          path="/product/create/:categorySlug"
+          element={
+            <ProtectedRoute allowedRoles={["owner"]}>
+              <ProductCreatePage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Selected Category + Main Product */}
+
+        <Route
+          path="/product/create/:categorySlug/:mainProductSlug"
+          element={
+            <ProtectedRoute allowedRoles={["owner"]}>
+              <ProductCreatePage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Selected Category + Main Product + Brand Product */}
+
+        <Route
+          path="/product/create/:categorySlug/:mainProductSlug/:brandProductSlug"
+          element={
+            <ProtectedRoute allowedRoles={["owner"]}>
+              <ProductCreatePage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Final Product Details */}
+
+        <Route
+          path="/product/details"
+          element={
+            <ProtectedRoute allowedRoles={["owner"]}>
+              <ProductCreatePage />
+            </ProtectedRoute>
+          }
+        />
+
+
+        {/* ================= OTHER APP ROUTES ================= */}
 
         <Route
           path="/accounts"
@@ -187,16 +274,21 @@ const AppRoutes = () => {
           path="/profile"
           element={
             <ProtectedRoute allowedRoles={["owner", "cashier"]}>
-               <ProfilePage />
+              <ProfilePage />
             </ProtectedRoute>
           }
         />
+
       </Route>
+
+
+      {/* ================= FALLBACK ================= */}
 
       <Route
         path="*"
         element={<Navigate to="/" replace />}
       />
+
     </Routes>
   );
 };

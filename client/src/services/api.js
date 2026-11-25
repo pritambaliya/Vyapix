@@ -3,33 +3,53 @@ import axios from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+    baseURL: API_BASE_URL,
+    withCredentials: true,
 });
 
+// Request interceptor
+api.interceptors.request.use(
+    (config) => {
+        // Allow browser/Axios to set multipart boundary for FormData
+        if (config.data instanceof FormData) {
+            delete config.headers['Content-Type'];
+        } else if (config.data && typeof config.data === 'object') {
+            config.headers['Content-Type'] = 'application/json';
+        }
+
+        return config;
+    },
+    (error) => Promise.reject(error)
+);
+
+// Response interceptor
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    let message = 'An unexpected error occurred. Please try again.';
+    (response) => response,
+    (error) => {
+        let message = 'An unexpected error occurred. Please try again.';
 
-    if (error.response) {
-      message = error.response.data?.message || `Server error: ${error.response.statusText || error.response.status}`;
-    } else if (error.request) {
-      message = 'Unable to reach the Vyapix server. Please verify your backend connection.';
-    } else {
-      message = error.message || message;
+        if (error.response) {
+            message =
+                error.response.data?.message ||
+                `Server error: ${
+                    error.response.statusText ||
+                    error.response.status
+                }`;
+        } else if (error.request) {
+            message =
+                'Unable to reach the Vyapix server. Please verify your backend connection.';
+        } else {
+            message = error.message || message;
+        }
+
+        const enhancedError = new Error(message);
+
+        enhancedError.response = error.response;
+        enhancedError.status = error.response?.status;
+        enhancedError.data = error.response?.data;
+
+        return Promise.reject(enhancedError);
     }
-
-    const enhancedError = new Error(message);
-    enhancedError.response = error.response;
-    enhancedError.status = error.response?.status;
-    enhancedError.data = error.response?.data;
-
-    return Promise.reject(enhancedError);
-  }
 );
 
 export default api;

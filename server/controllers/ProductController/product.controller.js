@@ -30,7 +30,7 @@ const populateProduct = (query) => {
     return query
         .populate("categoryId", "name")
         .populate("mainProductId", "name")
-        .populate("brandProductId", "name");
+        .populate("brandProductId", "name brandName");
 };
 
 const validateProductReferences = async ({
@@ -472,7 +472,7 @@ export const getProducts = async (req, res) => {
             products = products.filter(product => {
 
                 const mainName = product.mainProductId?.name?.toLowerCase() || "";
-                const brandName = product.brandProductId?.name?.toLowerCase() || "";
+                const brandName = product.brandProductId?.brandName?.toLowerCase() || "";
                 const categoryName = product.categoryId?.name?.toLowerCase() || "";
 
                 const variantMatch = product.variants?.some(variant =>
@@ -618,23 +618,23 @@ export const getProductByBarcode = async (req, res) => {
 
 export const addStock = async (req, res) => {
     try {
-
         const { ownerId, shopId } = getInventoryFilter(req);
         const { id } = req.params;
-
         const { quantity, variantId, note } = req.body;
 
         if (!isValidId(id)) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid product ID"
+                message: "Invalid product ID",
             });
         }
 
-        if (!Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
+        const stockQuantity = Number(quantity);
+
+        if (!Number.isFinite(stockQuantity) || stockQuantity <= 0) {
             return res.status(400).json({
                 success: false,
-                message: "Valid quantity is required"
+                message: "Invalid stock quantity",
             });
         }
 
@@ -642,165 +642,64 @@ export const addStock = async (req, res) => {
             _id: id,
             ownerId,
             shopId,
-            isActive: true
+            isActive: true,
         });
 
         if (!product) {
             return res.status(404).json({
                 success: false,
-                message: "Product not found"
+                message: "Product not found",
             });
         }
 
+        let previousStock;
+        let newStock;
         let variantName = null;
+        let selectedVariantId = null;
 
+        // VARIANT PRODUCT
         if (product.sellingType === "VARIANT") {
 
             if (!variantId || !isValidId(variantId)) {
                 return res.status(400).json({
                     success: false,
-                    message: "Variant ID is required"
+                    message: "Variant ID is required",
                 });
             }
 
             const variant = product.variants.id(variantId);
 
-            if (!variant) {
+            if (!variant || !variant.isActive) {
                 return res.status(404).json({
                     success: false,
-                    message: "Variant not found"
+                    message: "Active variant not found",
                 });
             }
 
-            variant.stock += Number(quantity);
+            // Update ONLY selected variant stock
+            previousStock = variant.stock;
+
+            variant.stock += stockQuantity;
+
+            newStock = variant.stock;
             variantName = variant.variantName;
+            selectedVariantId = variant._id;
 
         } else {
 
+            // LOOSE PRODUCT
             if (variantId) {
                 return res.status(400).json({
                     success: false,
-                    message: "Loose products do not support variant ID"
+                    message: "Loose products do not support variants",
                 });
             }
 
-            product.stock += Number(quantity);
-        }
+            previousStock = product.stock;
 
-        await product.save();
+            product.stock += stockQuantity;
 
-        await InventoryHistory.create({
-            ownerId,
-            shopId,
-            productId: product._id,
-            variantId: variantId || null,
-            variantName,
-            quantity: Number(quantity),
-            type: "ADD",
-            note: note || ""
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Stock added successfully",
-            product
-        });
-
-    } catch (error) {
-
-        console.error("Add Stock Error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to add stock"
-        });
-    }
-};
-
-
-export const removeStock = async (req, res) => {
-    try {
-
-        const { ownerId, shopId } = getInventoryFilter(req);
-        const { id } = req.params;
-
-        const { quantity, variantId, note } = req.body;
-
-        if (!isValidId(id)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid product ID"
-            });
-        }
-
-        if (!Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid quantity is required"
-            });
-        }
-
-        const product = await Product.findOne({
-            _id: id,
-            ownerId,
-            shopId,
-            isActive: true
-        });
-
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: "Product not found"
-            });
-        }
-
-        let variantName = null;
-
-        if (product.sellingType === "VARIANT") {
-
-            if (!variantId || !isValidId(variantId)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Variant ID is required"
-                });
-            }
-
-            const variant = product.variants.id(variantId);
-
-            if (!variant) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Variant not found"
-                });
-            }
-
-            if (variant.stock < Number(quantity)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Insufficient variant stock"
-                });
-            }
-
-            variant.stock -= Number(quantity);
-            variantName = variant.variantName;
-
-        } else {
-
-            if (variantId) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Loose products do not support variant ID"
-                });
-            }
-
-            if (product.stock < Number(quantity)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Insufficient stock"
-                });
-            }
-
-            product.stock -= Number(quantity);
+            newStock = product.stock;
         }
 
         await product.save();
@@ -809,21 +708,164 @@ export const removeStock = async (req, res) => {
             ownerId,
             shopId,
             productId: product._id,
-            variantId: variantId || null,
+            variantId: selectedVariantId,
             variantName,
-            quantity: Number(quantity),
-            type: "REMOVE",
-            note: note || ""
+            quantity: stockQuantity,
+            type: "stock_added",
+            previousStock,
+            newStock,
+            reason: note || "",
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Stock added successfully",
+            data: {
+                productId: product._id,
+                variantId: selectedVariantId,
+                variantName,
+                previousStock,
+                newStock,
+            },
+        });
+
+    } catch (error) {
+        console.error("Add Stock Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to add stock",
+        });
+    }
+};
+
+
+export const removeStock = async (req, res) => {
+    try {
+        const { ownerId, shopId } = getInventoryFilter(req);
+        const { id } = req.params;
+        const { quantity, variantId, note } = req.body;
+
+        if (!isValidId(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid product ID"
+            });
+        }
+
+        const stockQuantity = Number(quantity);
+
+        if (!Number.isFinite(stockQuantity) || stockQuantity <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid quantity is required"
+            });
+        }
+
+        const product = await Product.findOne({
+            _id: id,
+            ownerId,
+            shopId,
+            isActive: true
+        });
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found"
+            });
+        }
+
+        let previousStock;
+        let newStock;
+        let variantName = null;
+        let selectedVariantId = null;
+
+        if (product.sellingType === "VARIANT") {
+
+            if (!variantId || !isValidId(variantId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Variant ID is required"
+                });
+            }
+
+            const variant = product.variants.id(variantId);
+
+            if (!variant || !variant.isActive) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Active variant not found"
+                });
+            }
+
+            if (variant.stock < stockQuantity) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Insufficient variant stock"
+                });
+            }
+
+            // Update only selected variant stock
+            previousStock = variant.stock;
+
+            variant.stock -= stockQuantity;
+
+            newStock = variant.stock;
+            variantName = variant.variantName;
+            selectedVariantId = variant._id;
+
+        } else {
+
+            if (variantId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Loose products do not support variants"
+                });
+            }
+
+            if (product.stock < stockQuantity) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Insufficient stock"
+                });
+            }
+
+            previousStock = product.stock;
+
+            product.stock -= stockQuantity;
+
+            newStock = product.stock;
+        }
+
+        await product.save();
+
+        await InventoryActivity.create({
+            ownerId,
+            shopId,
+            productId: product._id,
+            variantId: selectedVariantId,
+            variantName,
+            quantity: stockQuantity,
+            type: "stock_removed",
+            previousStock,
+            newStock,
+            reason: note || ""
         });
 
         return res.status(200).json({
             success: true,
             message: "Stock removed successfully",
-            product
+            data: {
+                productId: product._id,
+                variantId: selectedVariantId,
+                variantName,
+                previousStock,
+                newStock
+            }
         });
 
     } catch (error) {
-
         console.error("Remove Stock Error:", error);
 
         return res.status(500).json({

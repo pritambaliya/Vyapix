@@ -11,7 +11,7 @@ router.get("/", authMiddleware, getBrandProducts);
 
 router.get("/:id", authMiddleware, getBrandProductById);
 
-router.patch("/:id", authMiddleware, updateBrandProduct);
+router.patch("/:id", authMiddleware, upload.single("image"), updateBrandProduct);
 
 router.delete("/:id", authMiddleware, deleteBrandProduct);
 

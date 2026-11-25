@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import BrandProduct from "../../models/ProductModel/brandProduct.model.js";
 import MainProduct from "../../models/ProductModel/mainProduct.model.js";
+import cloudinary from "../../config/clodanary.js";
+import uploadToCloudinary from "../../utils/uploadToCloudinary.js";
 
 const getOwnerId = (req) => req.owner?._id || req.user?._id;
 
@@ -50,25 +52,25 @@ export const createBrandProduct = async (req, res) => {
         let imageUrl = "";
 
         if (req.file) {
-            const result = await new Promise((resolve, reject) => {
-                const uploadStream = cloudinary.uploader.upload_stream(
-                    {
-                        folder: "vyapix/brand-products",
-                        resource_type: "image"
-                    },
-                    (error, result) => {
-                        if (error) {
-                            reject(error);
-                        } else {
-                            resolve(result);
-                        }
-                    }
+            try {
+                const result = await uploadToCloudinary(
+                    req.file.buffer,
+                    "vyapix/brand-products"
                 );
 
-                uploadStream.end(req.file.buffer);
-            });
+                imageUrl = result.secure_url;
 
-            imageUrl = result.secure_url;
+                console.log("Brand Product Image Uploaded:", imageUrl);
+
+            } catch (uploadError) {
+                console.error("Brand Product Image Upload Error:", uploadError);
+
+                return res.status(502).json({
+                    success: false,
+                    message: "Image upload failed. Please try again.",
+                    error: uploadError.message
+                });
+            }
         }
 
         const brandProduct = await BrandProduct.create({
@@ -235,7 +237,7 @@ export const updateBrandProduct = async (req, res) => {
             });
         }
 
-        const { mainProductId, brandName, name, image } = req.body;
+        const { mainProductId, brandName, name } = req.body;
 
         // Validate new main product if supplied
         if (mainProductId !== undefined) {
@@ -265,6 +267,7 @@ export const updateBrandProduct = async (req, res) => {
             brandProduct.mainProductId = mainProductId;
         }
 
+        // Update product name
         if (name !== undefined) {
             if (!name.trim()) {
                 return res.status(400).json({
@@ -276,12 +279,38 @@ export const updateBrandProduct = async (req, res) => {
             brandProduct.name = name.trim();
         }
 
+        // Update brand name
         if (brandName !== undefined) {
             brandProduct.brandName = brandName.trim() || "Unbranded";
         }
 
-        if (image !== undefined) {
-            brandProduct.image = image;
+        // Upload new image to Cloudinary
+        if (req.file) {
+            try {
+                const result = await uploadToCloudinary(
+                    req.file.buffer,
+                    "vyapix/brand-products"
+                );
+
+                brandProduct.image = result.secure_url;
+
+                console.log(
+                    "Brand Product Image Updated:",
+                    result.secure_url
+                );
+
+            } catch (uploadError) {
+                console.error(
+                    "Brand Product Image Upload Error:",
+                    uploadError
+                );
+
+                return res.status(502).json({
+                    success: false,
+                    message: "Image upload failed. Please try again.",
+                    error: uploadError.message
+                });
+            }
         }
 
         await brandProduct.save();
