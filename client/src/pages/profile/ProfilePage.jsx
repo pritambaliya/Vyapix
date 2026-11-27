@@ -8,6 +8,7 @@ import Badge from '../../Components/common/Badge';
 import shopService from '../../services/shopService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import SEO from '../../Components/common/SEO';
 
 export const ProfilePage = () => {
   const { user, shop, isOwner, updateShopState } = useAuth();
@@ -154,6 +155,12 @@ export const ProfilePage = () => {
 
   return (
     <div className="mx-auto min-h-full max-w-4xl space-y-6 bg-[#FFFDF9] pb-6">
+      <SEO
+        title="Shop Profile | Vyapix"
+        description="Manage your shop profile, logo, contact details, and GST information."
+        path="/profile"
+        noIndex={true}
+      />
       {/* Page Header */}
       <div className="flex flex-col gap-3 border-b border-orange-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>

@@ -1,5 +1,5 @@
 import express from "express";
-import {createMainProduct, getMainProducts, getMainProductById, updateMainProduct, deleteMainProduct } from "../../controllers/ProductController/mainProduct.controller.js";
+import {createMainProduct, getMainProducts, getMainProductById, updateMainProduct } from "../../controllers/ProductController/mainProduct.controller.js";
 import authMiddleware from "../../middleware/auth.middleware.js";
 import upload from "../../middleware/upload.middleware.js";
 
@@ -12,7 +12,5 @@ router.get("/", authMiddleware, getMainProducts);
 router.get("/:id", authMiddleware, getMainProductById);
 
 router.patch("/:id", authMiddleware, upload.single("image"), updateMainProduct);
-
-router.delete("/:id", authMiddleware, deleteMainProduct);
 
 export default router;

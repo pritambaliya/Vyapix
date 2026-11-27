@@ -1,7 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 
 const SITE_NAME = 'Vyapix';
-const SITE_URL = 'https://YOUR-DOMAIN.com';
+const SITE_URL = import.meta.env.VITE_SITE_URL || 'https://vyapix.com';
 
 const SEO = ({
   title,

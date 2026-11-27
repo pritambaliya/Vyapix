@@ -34,7 +34,8 @@ export const getMainProductName = (product) => {
 
 export const getBrandName = (product) => {
   return (
-    product?.brandProductId.brandName ||
+    product?.brandProductId?.brandName ||
+    product?.brandProductId?.name ||
     'Unbranded'
   );
 };

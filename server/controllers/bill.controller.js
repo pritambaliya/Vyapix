@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Bill from "../models/bill.model.js";
 import Product from "../models/ProductModel/product.model.js";
+import BrandProduct from "../models/ProductModel/brandProduct.model.js";
 import Shop from "../models/shop.model.js";
 import InventoryActivity from "../models/inventoryActivity.model.js";
 import BillingActivity from "../models/billingActivity.model.js";
@@ -137,11 +138,21 @@ export const createBill = async (req, res) => {
                     subtotal += baseAmount;
                     gstTotal += gstAmount;
 
+                    // Product has no 'name' field — resolve it from the brandProduct
+                    // Use the client-provided name as a fast path; fall back to DB lookup.
+                    let productName = item.name?.trim();
+                    if (!productName) {
+                        const bp = await BrandProduct.findById(product.brandProductId)
+                            .select("name brandName")
+                            .lean();
+                        productName = bp?.name || bp?.brandName || "Product";
+                    }
+
                     billItems.push({
                         productId:  product._id,
-                        name:       product.name,
-                        sku:        product.sku,
-                        barcode:    product.barcode,
+                        name:       productName,
+                        sku:        product.sku || null,
+                        barcode:    product.barcode || null,
                         quantity,
                         unitPrice,
                         gstRate:    product.gstRate,

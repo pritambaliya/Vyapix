@@ -11,6 +11,7 @@ import billRoutes from "./routes/bill.route.js";
 import categoryRoutes from "./routes/ProductRoutes/category.routes.js";
 import mainProductRoutes from "./routes/ProductRoutes/mainProduct.routes.js";
 import brandProductRoutes from "./routes/ProductRoutes/brandProduct.routes.js";
+import archiveRoutes from "./routes/archive.routes.js";
 
 dotenv.config();
 const app = express();
@@ -46,6 +47,7 @@ app.use("/api/main-products", mainProductRoutes);
 app.use("/api/brand-products", brandProductRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/bills", billRoutes);
+app.use("/api/archive", archiveRoutes);
 app.use((req, res) => {
     res.status(404).json({
         success: false,

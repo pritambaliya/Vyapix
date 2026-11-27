@@ -2,6 +2,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from 'react';
 
 import { useNavigate, useParams } from 'react-router-dom';
@@ -16,6 +17,7 @@ import {
   Trash2,
   CheckCircle2,
   X,
+  Lock,
 } from 'lucide-react';
 
 import Modal from '../common/Modal';
@@ -25,6 +27,7 @@ import Button from '../common/Button';
 import BarcodeScanner from './BarcodeScanner';
 
 import productService from '../../services/productService';
+import { useToast } from '../../context/ToastContext';
 
 import CategoryStep from './product-wizard/CategoryStep';
 import MainProductStep from './product-wizard/MainProductStep';
@@ -58,6 +61,7 @@ const INITIAL_VARIANT = {
   lowStockLimit: '5',
   sku: '',
   barcode: '',
+  isActive: true,
 };
 
 const INITIAL_FORM = {
@@ -126,7 +130,7 @@ const resolveRouteItem = (items, segment) => {
   const id = segment.split('--').pop();
 
   const byId = items.find(
-    (item) => getId(item) === id
+    (item) => String(getId(item)) === String(id)
   );
 
   if (byId) return byId;
@@ -138,6 +142,30 @@ const resolveRouteItem = (items, segment) => {
     ) || null
   );
 };
+
+// API response can be returned in different shapes.
+const unwrapProduct = (response) => {
+  if (!response) return null;
+
+  if (response.product) return response.product;
+
+  if (response.data?.product) {
+    return response.data.product;
+  }
+
+  if (response.data?._id || response.data?.id) {
+    return response.data;
+  }
+
+  if (response._id || response.id) {
+    return response;
+  }
+
+  return null;
+};
+
+const isNotFoundError = (error) =>
+  error?.response?.status === 404;
 
 // --------------------------------------------------
 // PRODUCT MODAL
@@ -158,17 +186,26 @@ export const ProductModal = ({
     brandProductSlug,
   } = useParams();
 
-  const isEdit = Boolean(product);
-
-  const routeStep = brandProductSlug
-    ? 4
-    : mainProductSlug
-      ? 3
-      : categorySlug
-        ? 2
-        : 1;
+  const {
+    success,
+    error: showError,
+    confirm,
+  } = useToast();
 
   const closePage = onClose || (() => navigate('/products'));
+
+  const isMountedRef = useRef(true);
+  const lookupRequestRef = useRef(0);
+
+  // --------------------------------------------------
+  // ACTIVE PRODUCT
+  // --------------------------------------------------
+
+  // This can come either from the parent prop or from
+  // the BrandProduct lookup API.
+  const [activeProduct, setActiveProduct] = useState(product);
+
+  const isEdit = Boolean(activeProduct);
 
   // --------------------------------------------------
   // FORM STATE
@@ -195,15 +232,33 @@ export const ProductModal = ({
   const [catalogueLoading, setCatalogueLoading] = useState(false);
   const [catalogueError, setCatalogueError] = useState('');
 
+  const [productLookupLoading, setProductLookupLoading] = useState(false);
+
   // --------------------------------------------------
   // WIZARD STATE
   // --------------------------------------------------
 
   const [wizardStep, setWizardStep] = useState(1);
 
+  const routeStep = brandProductSlug
+    ? 4
+    : mainProductSlug
+      ? 3
+      : categorySlug
+        ? 2
+        : 1;
+
   // --------------------------------------------------
-  // BODY SCROLL LOCK FOR CREATE MODAL
+  // BODY SCROLL LOCK
   // --------------------------------------------------
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isEdit || !isOpen) return;
@@ -247,6 +302,187 @@ export const ProductModal = ({
   }));
 
   // --------------------------------------------------
+  // POPULATE PRODUCT FORM
+  // --------------------------------------------------
+
+  const populateProductForm = useCallback((selectedProduct) => {
+    if (!selectedProduct) return;
+
+    const variants = Array.isArray(selectedProduct.variants)
+      ? selectedProduct.variants
+          .filter((variant) => variant.isActive !== false)
+          .map((variant) => ({
+            _id: variant._id,
+
+            variantName: variant.variantName || '',
+            quantity: String(variant.quantity ?? 1),
+            unit: variant.unit || 'pcs',
+
+            purchasePrice: String(
+              variant.purchasePrice ?? ''
+            ),
+
+            sellingPrice: String(
+              variant.sellingPrice ?? ''
+            ),
+
+            gstRate: Number(
+              variant.gstRate ?? selectedProduct.gstRate ?? 0
+            ),
+
+            stock: String(variant.stock ?? 0),
+
+            lowStockLimit: String(
+              variant.lowStockLimit ?? 5
+            ),
+
+            sku: variant.sku || '',
+            barcode: variant.barcode || '',
+
+            isActive: variant.isActive ?? true,
+          }))
+      : [];
+
+    setFormData({
+      categoryId: getId(selectedProduct.categoryId),
+      mainProductId: getId(selectedProduct.mainProductId),
+      brandProductId: getId(selectedProduct.brandProductId),
+
+      sellingType: selectedProduct.sellingType || 'LOOSE',
+
+      unit: selectedProduct.unit || 'kg',
+
+      purchasePrice:
+        selectedProduct.purchasePrice != null
+          ? String(selectedProduct.purchasePrice)
+          : '',
+
+      sellingPrice:
+        selectedProduct.sellingPrice != null
+          ? String(selectedProduct.sellingPrice)
+          : '',
+
+      stock: String(selectedProduct.stock ?? 0),
+
+      lowStockLimit: String(
+        selectedProduct.lowStockLimit ?? 5
+      ),
+
+      sku: selectedProduct.sku || '',
+      barcode: selectedProduct.barcode || '',
+
+      gstRate: Number(selectedProduct.gstRate ?? 0),
+
+      variants:
+        variants.length > 0
+          ? variants
+          : [{ ...INITIAL_VARIANT }],
+    });
+
+    setErrors({});
+  }, []);
+
+  // --------------------------------------------------
+  // RESET / INITIAL PRODUCT
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setActiveProduct(product || null);
+
+    if (product) {
+      populateProductForm(product);
+      setWizardStep(4);
+    } else {
+      setFormData({
+        ...INITIAL_FORM,
+        variants: [{ ...INITIAL_VARIANT }],
+      });
+
+      setWizardStep(routeStep);
+    }
+
+    setErrors({});
+    setShowScanner(false);
+    setScannerTarget(null);
+    setCatalogueError('');
+    setProductLookupLoading(false);
+  }, [isOpen, product, populateProductForm, routeStep]);
+
+  // --------------------------------------------------
+  // FETCH EXISTING PRODUCT BY BRAND PRODUCT
+  // --------------------------------------------------
+
+  const lookupExistingProduct = useCallback(
+    async (brandProductId) => {
+      if (!brandProductId) return null;
+
+      const requestId = ++lookupRequestRef.current;
+
+      setProductLookupLoading(true);
+      setCatalogueError('');
+
+      try {
+        const response =
+          await productService.getProductByBrandProduct(
+            brandProductId
+          );
+
+        if (requestId !== lookupRequestRef.current) {
+          return null;
+        }
+
+        // exists: false is a valid "no product yet" response — don't throw
+        if (response?.exists === false || response?.data?.exists === false) {
+          setActiveProduct(null);
+          return null;
+        }
+
+        const existingProduct = unwrapProduct(response);
+
+        if (!existingProduct) {
+          setActiveProduct(null);
+          return null;
+        }
+
+        setActiveProduct(existingProduct);
+
+        populateProductForm(existingProduct);
+
+        setWizardStep(4);
+
+        return existingProduct;
+      } catch (err) {
+        if (requestId !== lookupRequestRef.current) {
+          return null;
+        }
+
+        if (isNotFoundError(err)) {
+          setActiveProduct(null);
+
+          return null;
+        }
+
+        const message = getErrorMessage(
+          err,
+          'Unable to check existing product.'
+        );
+
+        setCatalogueError(message);
+        showError(message);
+
+        throw err;
+      } finally {
+        if (requestId === lookupRequestRef.current) {
+          setProductLookupLoading(false);
+        }
+      }
+    },
+    [populateProductForm, showError]
+  );
+
+  // --------------------------------------------------
   // FETCH CATEGORIES FOR EDIT MODE
   // --------------------------------------------------
 
@@ -256,24 +492,20 @@ export const ProductModal = ({
     let cancelled = false;
 
     const fetchCategories = async () => {
-      setCatalogueLoading(true);
-      setCatalogueError('');
-
       try {
         const response = await productService.getCategories();
 
         if (!cancelled) {
           setCategories(getList(response));
         }
-      } catch (error) {
+      } catch (err) {
         if (!cancelled) {
-          setCatalogueError(
-            getErrorMessage(error, 'Failed to load categories.')
+          const message = getErrorMessage(
+            err,
+            'Failed to load categories.'
           );
-        }
-      } finally {
-        if (!cancelled) {
-          setCatalogueLoading(false);
+
+          setCatalogueError(message);
         }
       }
     };
@@ -306,12 +538,13 @@ export const ProductModal = ({
         if (!cancelled) {
           setMainProducts(getList(response));
         }
-      } catch (error) {
+      } catch (err) {
         if (!cancelled) {
-          setMainProducts([]);
-
           setCatalogueError(
-            getErrorMessage(error, 'Failed to load main products.')
+            getErrorMessage(
+              err,
+              'Failed to load main products.'
+            )
           );
         }
       }
@@ -345,12 +578,13 @@ export const ProductModal = ({
         if (!cancelled) {
           setBrandProducts(getList(response));
         }
-      } catch (error) {
+      } catch (err) {
         if (!cancelled) {
-          setBrandProducts([]);
-
           setCatalogueError(
-            getErrorMessage(error, 'Failed to load brand products.')
+            getErrorMessage(
+              err,
+              'Failed to load brand products.'
+            )
           );
         }
       }
@@ -364,89 +598,11 @@ export const ProductModal = ({
   }, [isOpen, isEdit, formData.mainProductId]);
 
   // --------------------------------------------------
-  // POPULATE FORM / RESET FORM
-  // --------------------------------------------------
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (product) {
-      const sellingType = product.sellingType || 'LOOSE';
-
-      const categoryId = getId(product.categoryId);
-      const mainProductId = getId(product.mainProductId);
-      const brandProductId = getId(product.brandProductId);
-
-      const variants =
-        Array.isArray(product.variants) && product.variants.length
-          ? product.variants.map((variant) => ({
-            _id: variant._id,
-            variantName: variant.variantName || '',
-            quantity: String(variant.quantity ?? 1),
-            unit: variant.unit || 'pcs',
-            purchasePrice: String(variant.purchasePrice ?? ''),
-            sellingPrice: String(variant.sellingPrice ?? ''),
-            gstRate: Number(
-              variant.gstRate ?? product.gstRate ?? 0
-            ),
-            stock: String(variant.stock ?? 0),
-            lowStockLimit: String(variant.lowStockLimit ?? 5),
-            sku: variant.sku || '',
-            barcode: variant.barcode || '',
-            isActive: variant.isActive ?? true,
-          }))
-          : [{ ...INITIAL_VARIANT }];
-
-      setFormData({
-        categoryId,
-        mainProductId,
-        brandProductId,
-        sellingType,
-
-        unit: product.unit || 'kg',
-
-        purchasePrice:
-          product.purchasePrice != null
-            ? String(product.purchasePrice)
-            : '',
-
-        sellingPrice:
-          product.sellingPrice != null
-            ? String(product.sellingPrice)
-            : '',
-
-        stock: String(product.stock ?? 0),
-        lowStockLimit: String(product.lowStockLimit ?? 5),
-
-        sku: product.sku || '',
-        barcode: product.barcode || '',
-
-        gstRate: Number(product.gstRate ?? 0),
-        variants,
-      });
-
-      setWizardStep(1);
-    } else {
-      setFormData({
-        ...INITIAL_FORM,
-        variants: [{ ...INITIAL_VARIANT }],
-      });
-
-      setWizardStep(1);
-    }
-
-    setErrors({});
-    setShowScanner(false);
-    setScannerTarget(null);
-    setCatalogueError('');
-  }, [isOpen, product]);
-
-  // --------------------------------------------------
   // RESTORE CREATE FLOW FROM URL
   // --------------------------------------------------
 
   useEffect(() => {
-    if (!isOpen || isEdit) return;
+    if (!isOpen || product || activeProduct) return;
 
     let cancelled = false;
 
@@ -557,11 +713,21 @@ export const ProductModal = ({
           mainProductId: getId(mainProduct),
           brandProductId: getId(brandProduct),
         }));
-      } catch (error) {
+
+        // If URL already contains a BrandProduct,
+        // check whether a Product exists for this shop.
+        if (brandProduct) {
+          try {
+            await lookupExistingProduct(getId(brandProduct));
+          } catch {
+            // The lookup function already displays the error.
+          }
+        }
+      } catch (err) {
         if (!cancelled) {
           setCatalogueError(
             getErrorMessage(
-              error,
+              err,
               'Unable to restore product selection.'
             )
           );
@@ -580,12 +746,14 @@ export const ProductModal = ({
     };
   }, [
     isOpen,
-    isEdit,
+    product,
+    activeProduct,
     categorySlug,
     mainProductSlug,
     brandProductSlug,
     routeStep,
     navigate,
+    lookupExistingProduct,
   ]);
 
   // --------------------------------------------------
@@ -597,6 +765,8 @@ export const ProductModal = ({
 
     if (!categoryId) return;
 
+    setActiveProduct(null);
+
     setFormData((prev) => ({
       ...prev,
       categoryId,
@@ -607,18 +777,15 @@ export const ProductModal = ({
     setMainProducts([]);
     setBrandProducts([]);
 
-    setErrors((prev) => ({
-      ...prev,
-      categoryId: '',
-      mainProductId: '',
-      brandProductId: '',
-    }));
+    setErrors({});
   };
 
   const handleWizardMainProductSelect = (mainProduct) => {
     const mainProductId = getId(mainProduct);
 
     if (!mainProductId) return;
+
+    setActiveProduct(null);
 
     setFormData((prev) => ({
       ...prev,
@@ -628,14 +795,10 @@ export const ProductModal = ({
 
     setBrandProducts([]);
 
-    setErrors((prev) => ({
-      ...prev,
-      mainProductId: '',
-      brandProductId: '',
-    }));
+    setErrors({});
   };
 
-  const handleWizardBrandProductSelect = (brandProduct) => {
+  const handleWizardBrandProductSelect = async (brandProduct) => {
     const brandProductId = getId(brandProduct);
 
     if (!brandProductId) return;
@@ -645,10 +808,27 @@ export const ProductModal = ({
       brandProductId,
     }));
 
-    setErrors((prev) => ({
-      ...prev,
-      brandProductId: '',
-    }));
+    setErrors({});
+
+    try {
+      const existingProduct =
+        await lookupExistingProduct(brandProductId);
+
+      if (!existingProduct) {
+        setWizardStep(4);
+
+        setActiveProduct(null);
+
+        setFormData((prev) => ({
+          ...prev,
+          brandProductId,
+          sellingType: 'LOOSE',
+          variants: [{ ...INITIAL_VARIANT }],
+        }));
+      }
+    } catch {
+      // Error already shown by lookupExistingProduct.
+    }
   };
 
   // --------------------------------------------------
@@ -691,42 +871,40 @@ export const ProductModal = ({
   // DELETE CATEGORY CALLBACK
   // --------------------------------------------------
 
-  const handleCategoryDeleted = useCallback((categoryId) => {
-    if (!categoryId) return;
+  const handleCategoryDeleted = useCallback(
+    (categoryId) => {
+      if (!categoryId) return;
 
-    const deletedId = String(categoryId);
+      const deletedId = String(categoryId);
 
-    setCategories((prev) =>
-      prev.filter(
-        (category) => String(getId(category)) !== deletedId
-      )
-    );
+      setCategories((prev) =>
+        prev.filter(
+          (category) => String(getId(category)) !== deletedId
+        )
+      );
 
-    if (String(formData.categoryId) !== deletedId) return;
+      if (String(formData.categoryId) !== deletedId) return;
 
-    setFormData((prev) => ({
-      ...prev,
-      categoryId: '',
-      mainProductId: '',
-      brandProductId: '',
-    }));
+      setFormData((prev) => ({
+        ...prev,
+        categoryId: '',
+        mainProductId: '',
+        brandProductId: '',
+      }));
 
-    setMainProducts([]);
-    setBrandProducts([]);
+      setMainProducts([]);
+      setBrandProducts([]);
 
-    setErrors((prev) => ({
-      ...prev,
-      categoryId: '',
-      mainProductId: '',
-      brandProductId: '',
-    }));
+      setErrors({});
 
-    setWizardStep(1);
+      setWizardStep(1);
 
-    navigate('/product/create', {
-      replace: true,
-    });
-  }, [formData.categoryId, navigate]);
+      navigate('/product/create', {
+        replace: true,
+      });
+    },
+    [formData.categoryId, navigate]
+  );
 
   // --------------------------------------------------
   // CREATE MAIN PRODUCT CALLBACK
@@ -787,12 +965,7 @@ export const ProductModal = ({
       }));
 
       setBrandProducts([]);
-
-      setErrors((prev) => ({
-        ...prev,
-        mainProductId: '',
-        brandProductId: '',
-      }));
+      setErrors({});
 
       setWizardStep(2);
 
@@ -842,7 +1015,7 @@ export const ProductModal = ({
         return {
           ...item,
           ...updatedProduct,
-          image: updatedProduct.image || item.image || "",
+          image: updatedProduct.image || item.image || '',
         };
       })
     );
@@ -869,11 +1042,7 @@ export const ProductModal = ({
         brandProductId: '',
       }));
 
-      setErrors((prev) => ({
-        ...prev,
-        brandProductId: '',
-      }));
-
+      setErrors({});
       setWizardStep(3);
 
       const category = categories.find(
@@ -902,49 +1071,6 @@ export const ProductModal = ({
       navigate,
     ]
   );
-
-  // --------------------------------------------------
-  // EDIT MODE DROPDOWN HANDLERS
-  // --------------------------------------------------
-
-  const handleCategoryChange = (event) => {
-    const categoryId = event.target.value;
-
-    setFormData((prev) => ({
-      ...prev,
-      categoryId,
-      mainProductId: '',
-      brandProductId: '',
-    }));
-
-    setMainProducts([]);
-    setBrandProducts([]);
-
-    setErrors((prev) => ({
-      ...prev,
-      categoryId: '',
-      mainProductId: '',
-      brandProductId: '',
-    }));
-  };
-
-  const handleMainProductChange = (event) => {
-    const mainProductId = event.target.value;
-
-    setFormData((prev) => ({
-      ...prev,
-      mainProductId,
-      brandProductId: '',
-    }));
-
-    setBrandProducts([]);
-
-    setErrors((prev) => ({
-      ...prev,
-      mainProductId: '',
-      brandProductId: '',
-    }));
-  };
 
   // --------------------------------------------------
   // GENERAL FORM CHANGE
@@ -999,17 +1125,42 @@ export const ProductModal = ({
     }));
   };
 
-  const removeVariant = (index) => {
-    setFormData((prev) => {
-      if (prev.variants.length <= 1) return prev;
+  // --------------------------------------------------
+  // REMOVE VARIANT WITH CONFIRMATION
+  // --------------------------------------------------
 
-      return {
-        ...prev,
-        variants: prev.variants.filter(
-          (_, i) => i !== index
-        ),
-      };
-    });
+  const removeVariant = async (index) => {
+    const variant = formData.variants[index];
+
+    if (!variant || formData.variants.length <= 1) {
+      showError('At least one variant is required.');
+      return;
+    }
+
+    // Existing variants require confirmation because
+    // the backend will deactivate them.
+    if (variant._id) {
+      const confirmed = await confirm({
+        title: 'Remove Variant?',
+        message:
+          `Are you sure you want to remove "${variant.variantName}"? ` +
+          'This variant will be deactivated and will no longer be available for sale.',
+        confirmText: 'Remove Variant',
+        cancelText: 'Keep Variant',
+        variant: 'danger',
+      });
+
+      if (!confirmed) return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      variants: prev.variants.filter(
+        (_, i) => i !== index
+      ),
+    }));
+
+    setErrors({});
   };
 
   // --------------------------------------------------
@@ -1018,26 +1169,27 @@ export const ProductModal = ({
 
   const isValidNumber = (value, minimum = 0) =>
     value !== '' &&
+    value !== null &&
+    value !== undefined &&
     Number.isFinite(Number(value)) &&
     Number(value) >= minimum;
 
   const validate = () => {
     const nextErrors = {};
 
-    if (!formData.categoryId) {
-      nextErrors.categoryId = 'Please select a category';
-    }
+    // Category validation is only required during creation.
+    if (!isEdit) {
+      if (!formData.categoryId) {
+        nextErrors.categoryId = 'Please select a category';
+      }
 
-    if (!formData.mainProductId) {
-      nextErrors.mainProductId = 'Please select a main product';
-    }
+      if (!formData.mainProductId) {
+        nextErrors.mainProductId = 'Please select a main product';
+      }
 
-    if (!formData.brandProductId) {
-      nextErrors.brandProductId = 'Please select a brand product';
-    }
-
-    if (!['LOOSE', 'VARIANT'].includes(formData.sellingType)) {
-      nextErrors.sellingType = 'Invalid selling type';
+      if (!formData.brandProductId) {
+        nextErrors.brandProductId = 'Please select a brand product';
+      }
     }
 
     if (formData.sellingType === 'LOOSE') {
@@ -1046,19 +1198,22 @@ export const ProductModal = ({
       }
 
       if (!isValidNumber(formData.purchasePrice)) {
-        nextErrors.purchasePrice = 'Enter a valid purchase price';
+        nextErrors.purchasePrice =
+          'Enter a valid purchase price';
       }
 
       if (!isValidNumber(formData.sellingPrice)) {
-        nextErrors.sellingPrice = 'Enter a valid selling price';
+        nextErrors.sellingPrice =
+          'Enter a valid selling price';
       }
 
       if (!isEdit && !isValidNumber(formData.stock)) {
         nextErrors.stock = 'Enter a valid initial stock';
       }
 
-      if (!isEdit && !isValidNumber(formData.lowStockLimit)) {
-        nextErrors.lowStockLimit = 'Enter a valid low stock limit';
+      if (!isValidNumber(formData.lowStockLimit)) {
+        nextErrors.lowStockLimit =
+          'Enter a valid low stock limit';
       }
     }
 
@@ -1098,7 +1253,7 @@ export const ProductModal = ({
             'Enter a valid stock quantity';
         }
 
-        if (!isEdit && !isValidNumber(variant.lowStockLimit)) {
+        if (!isValidNumber(variant.lowStockLimit)) {
           nextErrors[`variant_${index}_lowStockLimit`] =
             'Enter a valid low stock limit';
         }
@@ -1107,7 +1262,22 @@ export const ProductModal = ({
 
     setErrors(nextErrors);
 
-    return Object.keys(nextErrors).length === 0;
+    if (Object.keys(nextErrors).length > 0) {
+      requestAnimationFrame(() => {
+        const firstError = document.querySelector(
+          '#product-form [aria-invalid="true"], #product-form .text-rose-500'
+        );
+
+        firstError?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      });
+
+      return false;
+    }
+
+    return true;
   };
 
   // --------------------------------------------------
@@ -1115,13 +1285,16 @@ export const ProductModal = ({
   // --------------------------------------------------
 
   const buildPayload = () => {
-    const commonData = {
-      categoryId: formData.categoryId,
-      mainProductId: formData.mainProductId,
-      brandProductId: formData.brandProductId,
-      sellingType: formData.sellingType,
-      gstRate: Number(formData.gstRate),
-    };
+    // During editing, hierarchy and sellingType are immutable.
+    // Therefore, do not send these fields in the update payload.
+    const commonData = isEdit
+      ? {}
+      : {
+          categoryId: formData.categoryId,
+          mainProductId: formData.mainProductId,
+          brandProductId: formData.brandProductId,
+          sellingType: formData.sellingType,
+        };
 
     if (formData.sellingType === 'LOOSE') {
       return {
@@ -1132,11 +1305,14 @@ export const ProductModal = ({
         purchasePrice: Number(formData.purchasePrice),
         sellingPrice: Number(formData.sellingPrice),
 
+        gstRate: Number(formData.gstRate),
+
         lowStockLimit: Number(formData.lowStockLimit),
 
         sku: formData.sku.trim() || undefined,
         barcode: formData.barcode.trim() || undefined,
 
+        // Stock is sent only during creation.
         ...(!isEdit && {
           stock: Number(formData.stock),
         }),
@@ -1146,14 +1322,21 @@ export const ProductModal = ({
     return {
       ...commonData,
 
+      gstRate: Number(formData.gstRate),
+
       variants: formData.variants.map((variant) => ({
-        ...(variant._id && { _id: variant._id }),
+        ...(variant._id && {
+          _id: variant._id,
+        }),
 
         variantName: variant.variantName.trim(),
+
         quantity: Number(variant.quantity),
+
         unit: variant.unit,
 
         purchasePrice: Number(variant.purchasePrice),
+
         sellingPrice: Number(variant.sellingPrice),
 
         gstRate: Number(
@@ -1165,12 +1348,14 @@ export const ProductModal = ({
         ),
 
         sku: variant.sku.trim() || undefined,
+
         barcode: variant.barcode.trim() || undefined,
 
         ...(variant.isActive !== undefined && {
           isActive: variant.isActive,
         }),
 
+        // Existing stock is never overwritten during editing.
         ...(!isEdit && {
           stock: Number(variant.stock || 0),
         }),
@@ -1182,16 +1367,33 @@ export const ProductModal = ({
   // SUBMIT
   // --------------------------------------------------
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event?.preventDefault();
 
-    if (loading || catalogueLoading) return;
+    if (loading || catalogueLoading || productLookupLoading) {
+      return;
+    }
 
     if (!validate()) return;
 
-    const payload = buildPayload();
+    if (!onSave) {
+      showError('Save handler is not configured.');
+      return;
+    }
 
-    onSave(payload, product?._id || product?.id);
+    try {
+      const payload = buildPayload();
+
+      const productId = activeProduct
+        ? activeProduct._id || activeProduct.id
+        : undefined;
+
+      await onSave(payload, productId);
+    } catch (err) {
+      showError(
+        getErrorMessage(err, 'Unable to save product.')
+      );
+    }
   };
 
   // --------------------------------------------------
@@ -1279,7 +1481,7 @@ export const ProductModal = ({
           </h5>
 
           <p className="mt-1 text-xs text-slate-500">
-            Example: 1kg, 2kg, 5kg or Small, Large
+            Example: 500gm, 1kg, 5kg or Small, Large
           </p>
         </div>
 
@@ -1301,7 +1503,11 @@ export const ProductModal = ({
           placeholder="e.g. 1kg Packet"
           value={variant.variantName}
           onChange={(e) =>
-            handleVariantChange(index, 'variantName', e.target.value)
+            handleVariantChange(
+              index,
+              'variantName',
+              e.target.value
+            )
           }
           error={errors[`variant_${index}_variantName`]}
           required
@@ -1315,7 +1521,11 @@ export const ProductModal = ({
             step="0.001"
             value={variant.quantity}
             onChange={(e) =>
-              handleVariantChange(index, 'quantity', e.target.value)
+              handleVariantChange(
+                index,
+                'quantity',
+                e.target.value
+              )
             }
             error={errors[`variant_${index}_quantity`]}
             required
@@ -1325,7 +1535,11 @@ export const ProductModal = ({
             label="Unit"
             value={variant.unit}
             onChange={(e) =>
-              handleVariantChange(index, 'unit', e.target.value)
+              handleVariantChange(
+                index,
+                'unit',
+                e.target.value
+              )
             }
             options={unitOptions}
             error={errors[`variant_${index}_unit`]}
@@ -1340,7 +1554,11 @@ export const ProductModal = ({
             step="0.01"
             value={variant.purchasePrice}
             onChange={(e) =>
-              handleVariantChange(index, 'purchasePrice', e.target.value)
+              handleVariantChange(
+                index,
+                'purchasePrice',
+                e.target.value
+              )
             }
             error={errors[`variant_${index}_purchasePrice`]}
             required
@@ -1353,7 +1571,11 @@ export const ProductModal = ({
             step="0.01"
             value={variant.sellingPrice}
             onChange={(e) =>
-              handleVariantChange(index, 'sellingPrice', e.target.value)
+              handleVariantChange(
+                index,
+                'sellingPrice',
+                e.target.value
+              )
             }
             error={errors[`variant_${index}_sellingPrice`]}
             required
@@ -1362,9 +1584,15 @@ export const ProductModal = ({
 
         <Select
           label="GST Rate"
-          value={String(variant.gstRate ?? formData.gstRate)}
+          value={String(
+            variant.gstRate ?? formData.gstRate
+          )}
           onChange={(e) =>
-            handleVariantChange(index, 'gstRate', Number(e.target.value))
+            handleVariantChange(
+              index,
+              'gstRate',
+              Number(e.target.value)
+            )
           }
           options={gstOptions}
         />
@@ -1375,7 +1603,11 @@ export const ProductModal = ({
             placeholder="e.g. TATA-1KG"
             value={variant.sku}
             onChange={(e) =>
-              handleVariantChange(index, 'sku', e.target.value)
+              handleVariantChange(
+                index,
+                'sku',
+                e.target.value
+              )
             }
           />
 
@@ -1384,7 +1616,11 @@ export const ProductModal = ({
             placeholder="Barcode"
             value={variant.barcode}
             onChange={(e) =>
-              handleVariantChange(index, 'barcode', e.target.value)
+              handleVariantChange(
+                index,
+                'barcode',
+                e.target.value
+              )
             }
           />
         </div>
@@ -1393,7 +1629,12 @@ export const ProductModal = ({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => openScanner({ type: 'variant', index })}
+          onClick={() =>
+            openScanner({
+              type: 'variant',
+              index,
+            })
+          }
         >
           <Barcode className="mr-2 h-4 w-4" />
           Scan Variant Barcode
@@ -1407,7 +1648,11 @@ export const ProductModal = ({
             step="0.001"
             value={variant.stock}
             onChange={(e) =>
-              handleVariantChange(index, 'stock', e.target.value)
+              handleVariantChange(
+                index,
+                'stock',
+                e.target.value
+              )
             }
             error={errors[`variant_${index}_stock`]}
             disabled={isEdit}
@@ -1421,7 +1666,11 @@ export const ProductModal = ({
             step="0.001"
             value={variant.lowStockLimit}
             onChange={(e) =>
-              handleVariantChange(index, 'lowStockLimit', e.target.value)
+              handleVariantChange(
+                index,
+                'lowStockLimit',
+                e.target.value
+              )
             }
             error={errors[`variant_${index}_lowStockLimit`]}
           />
@@ -1442,15 +1691,18 @@ export const ProductModal = ({
   // --------------------------------------------------
 
   const selectedCategory = categories.find(
-    (item) => getId(item) === formData.categoryId
+    (item) =>
+      String(getId(item)) === String(formData.categoryId)
   );
 
   const selectedMainProduct = mainProducts.find(
-    (item) => getId(item) === formData.mainProductId
+    (item) =>
+      String(getId(item)) === String(formData.mainProductId)
   );
 
   const selectedBrandProduct = brandProducts.find(
-    (item) => getId(item) === formData.brandProductId
+    (item) =>
+      String(getId(item)) === String(formData.brandProductId)
   );
 
   // --------------------------------------------------
@@ -1459,15 +1711,18 @@ export const ProductModal = ({
 
   const getCreateRoute = (step) => {
     const category = categories.find(
-      (item) => getId(item) === formData.categoryId
+      (item) =>
+        String(getId(item)) === String(formData.categoryId)
     );
 
     const mainProduct = mainProducts.find(
-      (item) => getId(item) === formData.mainProductId
+      (item) =>
+        String(getId(item)) === String(formData.mainProductId)
     );
 
     const brandProduct = brandProducts.find(
-      (item) => getId(item) === formData.brandProductId
+      (item) =>
+        String(getId(item)) === String(formData.brandProductId)
     );
 
     if (step <= 1 || !category) {
@@ -1492,7 +1747,7 @@ export const ProductModal = ({
   };
 
   const goToWizardStep = (step) => {
-    if (step < 1 || step > 4) return;
+    if (step < 1 || step > 4 || isEdit) return;
 
     navigate(getCreateRoute(step));
   };
@@ -1518,7 +1773,13 @@ export const ProductModal = ({
       };
 
       const goNext = () => {
-        if (!canContinue || catalogueLoading) return;
+        if (
+          !canContinue ||
+          catalogueLoading ||
+          productLookupLoading
+        ) {
+          return;
+        }
 
         goToWizardStep(wizardStep + 1);
       };
@@ -1543,7 +1804,11 @@ export const ProductModal = ({
               <button
                 type="button"
                 onClick={goNext}
-                disabled={!canContinue || catalogueLoading}
+                disabled={
+                  !canContinue ||
+                  catalogueLoading ||
+                  productLookupLoading
+                }
                 className="rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Next →
@@ -1552,7 +1817,11 @@ export const ProductModal = ({
               <button
                 type="submit"
                 form="product-form"
-                disabled={loading || catalogueLoading}
+                disabled={
+                  loading ||
+                  catalogueLoading ||
+                  productLookupLoading
+                }
                 className="rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? 'Creating...' : 'Create Product'}
@@ -1611,8 +1880,6 @@ export const ProductModal = ({
             </div>
           )}
 
-          {/* STEP 1: CATEGORY */}
-
           {wizardStep === 1 && (
             <CategoryStep
               categories={categories}
@@ -1623,8 +1890,6 @@ export const ProductModal = ({
               onCategoryDeleted={handleCategoryDeleted}
             />
           )}
-
-          {/* STEP 2: MAIN PRODUCT */}
 
           {wizardStep === 2 && (
             <MainProductStep
@@ -1639,8 +1904,6 @@ export const ProductModal = ({
             />
           )}
 
-          {/* STEP 3: BRAND PRODUCT */}
-
           {wizardStep === 3 && (
             <BrandProductStep
               brandProducts={brandProducts}
@@ -1653,8 +1916,6 @@ export const ProductModal = ({
               onBack={() => goToWizardStep(2)}
             />
           )}
-
-          {/* STEP 4: PRODUCT DETAILS */}
 
           {wizardStep === 4 && (
             <section className="space-y-5">
@@ -1671,11 +1932,9 @@ export const ProductModal = ({
               {/* SELECTED CATALOGUE */}
 
               <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-800">
-                    Selected Catalogue
-                  </h4>
-                </div>
+                <h4 className="mb-3 text-sm font-semibold text-slate-800">
+                  Selected Catalogue
+                </h4>
 
                 <div className="space-y-3">
                   {[
@@ -1772,7 +2031,7 @@ export const ProductModal = ({
 
                       <p className="mt-1 text-xs leading-relaxed text-slate-600">
                         Use for different package sizes or options,
-                        such as 1kg, 2kg and 5kg packets.
+                        such as 500gm, 1kg and 5kg packets.
                       </p>
                     </>
                   )}
@@ -1889,7 +2148,9 @@ export const ProductModal = ({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => openScanner({ type: 'loose' })}
+                        onClick={() =>
+                          openScanner({ type: 'loose' })
+                        }
                       >
                         <Barcode className="mr-2 h-4 w-4" />
                         Scan Barcode
@@ -1967,91 +2228,92 @@ export const ProductModal = ({
 
       {isEdit && (
         <>
+          {/* IMMUTABLE CATALOGUE INFORMATION */}
+
           <section>
             {sectionHeading(
               Package,
               'Product Catalogue',
-              'Update category, main product and brand product'
+              'Catalogue selection cannot be changed after product creation'
             )}
 
-            {catalogueError && (
-              <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-                {catalogueError}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="space-y-3">
+                {[
+                  {
+                    label: 'Category',
+                    value:
+                      activeProduct?.categoryId?.name ||
+                      selectedCategory?.name ||
+                      'Category',
+                  },
+                  {
+                    label: 'Main Product',
+                    value:
+                      activeProduct?.mainProductId?.name ||
+                      selectedMainProduct?.name ||
+                      'Main Product',
+                  },
+                  {
+                    label: 'Brand Product',
+                    value:
+                      activeProduct?.brandProductId?.name ||
+                      activeProduct?.brandProductId?.brandName ||
+                      selectedBrandProduct?.name ||
+                      selectedBrandProduct?.brandName ||
+                      'Brand Product',
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="text-slate-500">
+                      {item.label}
+                    </span>
+
+                    <span className="font-medium text-slate-800">
+                      {item.value}
+                    </span>
+                  </div>
+                ))}
               </div>
-            )}
 
-            <div className="space-y-4">
-              <Select
-                label="Category"
-                name="categoryId"
-                value={formData.categoryId}
-                onChange={handleCategoryChange}
-                options={categoryOptions}
-                placeholder="Select category"
-                error={errors.categoryId}
-                required
-              />
-
-              <Select
-                label="Main Product"
-                name="mainProductId"
-                value={formData.mainProductId}
-                onChange={handleMainProductChange}
-                options={mainProductOptions}
-                placeholder={
-                  formData.categoryId
-                    ? 'Select main product'
-                    : 'Select category first'
-                }
-                error={errors.mainProductId}
-                disabled={!formData.categoryId}
-                required
-              />
-
-              <Select
-                label="Brand Product"
-                name="brandProductId"
-                value={formData.brandProductId}
-                onChange={handleChange}
-                options={brandProductOptions}
-                placeholder={
-                  formData.mainProductId
-                    ? 'Select brand product'
-                    : 'Select main product first'
-                }
-                error={errors.brandProductId}
-                disabled={!formData.mainProductId}
-                required
-              />
+              <div className="mt-3 flex items-center gap-2 border-t border-slate-200 pt-3 text-xs text-slate-500">
+                <Lock className="h-3.5 w-3.5" />
+                Catalogue hierarchy is locked after creation.
+              </div>
             </div>
           </section>
 
-          {/* SELLING CONFIGURATION */}
+          {/* IMMUTABLE SELLING TYPE */}
 
           <section>
             {sectionHeading(
               Layers,
               'Selling Configuration',
-              'Choose how this product is sold'
+              'Selling type is fixed after product creation'
             )}
 
-            <Select
-              label="Selling Type"
-              name="sellingType"
-              value={formData.sellingType}
-              onChange={handleChange}
-              options={[
-                {
-                  value: 'LOOSE',
-                  label: 'Loose Product',
-                },
-                {
-                  value: 'VARIANT',
-                  label: 'Product with Variants / Packages',
-                },
-              ]}
-              error={errors.sellingType}
-            />
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {formData.sellingType === 'LOOSE'
+                      ? 'Loose Product'
+                      : 'Product with Variants / Packages'}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    {formData.sellingType === 'LOOSE'
+                      ? 'Sold by weight or measurement.'
+                      : 'Sold in different package sizes or options.'}
+                  </p>
+                </div>
+
+                <Lock className="h-4 w-4 text-slate-400" />
+              </div>
+            </div>
           </section>
 
           {/* LOOSE PRODUCT */}
@@ -2112,14 +2374,10 @@ export const ProductModal = ({
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input
-                    label={`Initial Stock (${formData.unit})`}
+                    label={`Current Stock (${formData.unit})`}
                     type="number"
                     name="stock"
-                    min="0"
-                    step="0.001"
                     value={formData.stock}
-                    onChange={handleChange}
-                    error={errors.stock}
                     disabled
                   />
 
@@ -2169,7 +2427,9 @@ export const ProductModal = ({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => openScanner({ type: 'loose' })}
+                    onClick={() =>
+                      openScanner({ type: 'loose' })
+                    }
                   >
                     <Barcode className="mr-2 h-4 w-4" />
                     Scan Barcode
@@ -2186,7 +2446,7 @@ export const ProductModal = ({
               {sectionHeading(
                 Layers,
                 'Product Variants',
-                'Add package sizes with separate pricing and stock'
+                'Edit existing variants, add new variants or remove variants'
               )}
 
               <div className="space-y-4">
@@ -2260,6 +2520,12 @@ export const ProductModal = ({
           maxWidth="max-w-4xl"
           footer={renderFooter()}
         >
+          {catalogueError && (
+            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+              {catalogueError}
+            </div>
+          )}
+
           {formContent}
         </Modal>
       ) : (
@@ -2314,10 +2580,11 @@ export const ProductModal = ({
                   <React.Fragment key={item.step}>
                     <div className="flex min-w-0 items-center gap-2">
                       <div
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${wizardStep >= item.step
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-slate-200 text-slate-500'
-                          }`}
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
+                          wizardStep >= item.step
+                            ? 'bg-orange-500 text-white'
+                            : 'bg-slate-200 text-slate-500'
+                        }`}
                       >
                         {wizardStep > item.step ? (
                           <CheckCircle2 className="h-4 w-4" />
@@ -2327,12 +2594,13 @@ export const ProductModal = ({
                       </div>
 
                       <span
-                        className={`hidden truncate text-xs font-medium sm:inline ${wizardStep === item.step
-                          ? 'text-orange-600'
-                          : wizardStep > item.step
-                            ? 'text-slate-700'
-                            : 'text-slate-400'
-                          }`}
+                        className={`hidden truncate text-xs font-medium sm:inline ${
+                          wizardStep === item.step
+                            ? 'text-orange-600'
+                            : wizardStep > item.step
+                              ? 'text-slate-700'
+                              : 'text-slate-400'
+                        }`}
                       >
                         {item.label}
                       </span>
@@ -2340,10 +2608,11 @@ export const ProductModal = ({
 
                     {index !== 3 && (
                       <div
-                        className={`h-px min-w-3 flex-1 ${wizardStep > item.step
-                          ? 'bg-orange-400'
-                          : 'bg-slate-200'
-                          }`}
+                        className={`h-px min-w-3 flex-1 ${
+                          wizardStep > item.step
+                            ? 'bg-orange-400'
+                            : 'bg-slate-200'
+                        }`}
                       />
                     )}
                   </React.Fragment>
@@ -2354,10 +2623,12 @@ export const ProductModal = ({
             {/* MODAL BODY */}
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 sm:py-6">
-              {catalogueLoading && (
+              {(catalogueLoading || productLookupLoading) && (
                 <div className="mb-4 flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />
-                  Loading catalogue...
+                  {productLookupLoading
+                    ? 'Checking existing product...'
+                    : 'Loading catalogue...'}
                 </div>
               )}
 

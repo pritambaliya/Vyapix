@@ -23,6 +23,7 @@ import Badge from '../../Components/common/Badge';
 import ConfirmModal from '../../Components/common/ConfirmModal';
 import Skeleton from '../../Components/common/Skeleton';
 import billingService from '../../services/billingService';
+import SEO from '../../Components/common/SEO';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
 import { downloadPdfBlob } from '../../utils/downloadPdf';
 import { useAuth } from '../../context/AuthContext';
@@ -149,6 +150,12 @@ export const InvoiceDetailPage = () => {
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-5 pb-8 text-slate-800 ">
+      <SEO
+        title="Invoice Detail | Vyapix"
+        description="View, print, and manage this sales invoice."
+        path="/invoices"
+        noIndex={true}
+      />
       {/* Page heading */}
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-5  sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">

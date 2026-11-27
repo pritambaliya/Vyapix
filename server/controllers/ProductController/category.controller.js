@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 import Category from "../../models/ProductModel/category.model.js";
+import MainProduct from "../../models/ProductModel/mainProduct.model.js";
+import BrandProduct from "../../models/ProductModel/brandProduct.model.js";
+import Product from "../../models/ProductModel/product.model.js";
 
 const getOwnerId = (req) => req.owner?._id || req.user?._id;
 
@@ -219,57 +222,6 @@ export const updateCategory = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Failed to update category"
-        });
-    }
-};
-
-export const deleteCategory = async (req, res) => {
-    try {
-        const ownerId = getOwnerId(req);
-        const { id } = req.params;
-
-        if (!ownerId) {
-            return res.status(401).json({
-                success: false,
-                message: "Unauthorized"
-            });
-        }
-
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid category ID"
-            });
-        }
-
-        // Only owner-created categories can be deleted
-        const category = await Category.findOne({
-            _id: id,
-            ownerId
-        });
-
-        if (!category) {
-            return res.status(404).json({
-                success: false,
-                message: "Custom category not found"
-            });
-        }
-
-        category.isActive = false;
-
-        await category.save();
-
-        return res.status(200).json({
-            success: true,
-            message: "Category deleted successfully"
-        });
-
-    } catch (error) {
-        console.error("Delete Category Error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to delete category"
         });
     }
 };

@@ -19,6 +19,7 @@ import { useKeyboardShortcut } from '../../hooks/useKeyboardShortcut';
 import billingService from '../../services/billingService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import SEO from '../../Components/common/SEO';
 
 export const PosBillingPage = () => {
   const { isOwner, user } = useAuth();
@@ -152,6 +153,7 @@ export const PosBillingPage = () => {
         items: cart.map((item) => ({
           productId: item.productId || item._id,
           quantity: Number(item.quantity),
+          name: item.name,
         })),
         paymentMethod: checkoutPayload.paymentMethod,
         discount: Number(checkoutPayload.discount || 0),
@@ -183,6 +185,12 @@ export const PosBillingPage = () => {
 
   return (
     <div className="flex h-[calc(100dvh-5.5rem)] min-h-[500px] flex-col gap-4">
+      <SEO
+        title="Point of Sale | Vyapix"
+        description="Create bills, add items to cart, and generate invoices."
+        path="/billing"
+        noIndex={true}
+      />
       {/* Page Header */}
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-300 pb-3">
         <div className="min-w-0">

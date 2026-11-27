@@ -36,6 +36,22 @@ const brandProductSchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         },
+
+        deactivatedBy: {
+            type: String,
+            enum: [
+                "SELF",
+                "CATEGORY",
+                "MAIN_PRODUCT",
+                "BRAND_PRODUCT"
+            ],
+            default: null,
+        },
+
+        deactivatedAt: {
+            type: Date,
+            default: null,
+        },
     },
     {
         timestamps: true,

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import ProductModal from '../../Components/products/ProductModal';
 import productService from '../../services/productService';
 import { useToast } from '../../context/ToastContext';
+import SEO from '../../Components/common/SEO';
 
 const ProductCreatePage = () => {
   const navigate = useNavigate();
@@ -11,62 +12,85 @@ const ProductCreatePage = () => {
   const { success, error } = useToast();
 
   const [saving, setSaving] = useState(false);
-
-  // Prevent duplicate API requests.
   const submittingRef = useRef(false);
 
   // --------------------------------------------------
-  // CREATE PRODUCT
+  // CREATE OR UPDATE PRODUCT
   // --------------------------------------------------
 
-  const handleCreateProduct = useCallback(async (payload) => {
-    if (submittingRef.current) return;
+  const handleSaveProduct = useCallback(
+    async (payload, productId = null) => {
+      if (submittingRef.current) return;
 
-    submittingRef.current = true;
-    setSaving(true);
+      submittingRef.current = true;
+      setSaving(true);
 
-    try {
-      const response = await productService.createProduct(payload);
+      try {
+        let response;
 
-      if (response?.success === false) {
-        throw new Error(
-          response.message || 'Failed to create product'
+        if (productId) {
+          // Update existing product's final details.
+          response = await productService.updateProduct(
+            productId,
+            payload
+          );
+        } else {
+          // Create a new product.
+          response = await productService.createProduct(payload);
+        }
+
+        // Handle unsuccessful API responses.
+        if (response?.success === false) {
+          throw new Error(
+            response.message ||
+              (productId
+                ? 'Failed to update product.'
+                : 'Failed to create product.')
+          );
+        }
+
+        success(
+          response?.message ||
+            (productId
+              ? 'Product updated successfully.'
+              : 'Product created successfully.')
         );
+
+        // Navigate back to the products page.
+        navigate('/products', {
+          replace: true,
+          state: {
+            productCreated: !productId,
+            productUpdated: Boolean(productId),
+          },
+        });
+
+      } catch (err) {
+        console.error('Product save error:', err);
+
+        error(
+          err?.response?.data?.message ||
+            err?.message ||
+            'Something went wrong while saving the product.'
+        );
+
+      } finally {
+        submittingRef.current = false;
+        setSaving(false);
       }
-
-      success(
-        response?.message || 'Product added successfully'
-      );
-
-      // Return to product catalog after successful creation.
-      navigate('/products', {
-        replace: true,
-        state: {
-          productCreated: true,
-        },
-      });
-
-    } catch (err) {
-      error(
-        err?.response?.data?.message ||
-        err?.message ||
-        'Failed to create product'
-      );
-    } finally {
-      submittingRef.current = false;
-      setSaving(false);
-    }
-  }, [navigate, success, error]);
+    },
+    [navigate, success, error]
+  );
 
   // --------------------------------------------------
-  // CANCEL CREATION
+  // CANCEL
   // --------------------------------------------------
 
-  const handleCancel = () => {
-    if (saving) return;
+  const handleCancel = useCallback(() => {
+    if (saving || submittingRef.current) return;
 
     navigate('/products');
-  };
+  }, [navigate, saving]);
 
   // --------------------------------------------------
   // RENDER
@@ -74,15 +98,19 @@ const ProductCreatePage = () => {
 
   return (
     <div className="min-h-full">
-
+      <SEO
+        title="Add Product | Vyapix"
+        description="Add a new product to your inventory catalog."
+        path="/product/create"
+        noIndex={true}
+      />
       <ProductModal
         isOpen={true}
         onClose={handleCancel}
-        onSave={handleCreateProduct}
+        onSave={handleSaveProduct}
         product={null}
         loading={saving}
       />
-
     </div>
   );
 };

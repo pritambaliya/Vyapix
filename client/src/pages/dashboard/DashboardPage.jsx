@@ -37,6 +37,7 @@ import {
 } from '../../utils/formatters';
 
 import { useAuth } from '../../context/AuthContext';
+import SEO from '../../Components/common/SEO';
 
 const PIE_COLORS = ['#059669', '#4F46E5', '#D97706', '#E11D48'];
 
@@ -140,10 +141,10 @@ export const DashboardPage = () => {
           ? await productService.getOwnerProducts({ limit: 100 })
           : await productService.getBillingProducts({ limit: 100 });
 
-        products = productsRes.data?.products || [];
+        products = productsRes.products || productsRes.data?.products || [];
 
         totalProducts =
-          productsRes.data?.pagination?.total ?? products.length;
+          productsRes.count ?? productsRes.data?.pagination?.total ?? products.length;
 
         lowStockItems = products.filter((product) => {
           const stock = Number(product.stock ?? 0);
@@ -203,6 +204,12 @@ export const DashboardPage = () => {
 
   return (
     <div className="min-h-full space-y-6 bg-white text-slate-900">
+      <SEO
+        title="Dashboard | Vyapix"
+        description="Your store overview — daily sales, inventory status, low-stock alerts, and business insights."
+        path="/dashboard"
+        noIndex={true}
+      />
       {/* Dashboard Header */}
       <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-center">
         <div>

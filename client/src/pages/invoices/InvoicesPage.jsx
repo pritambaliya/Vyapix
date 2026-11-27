@@ -15,6 +15,7 @@ import { downloadPdfBlob } from '../../utils/downloadPdf';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import SEO from '../../Components/common/SEO';
 
 export const InvoicesPage = () => {
   const { isOwner } = useAuth();
@@ -165,6 +166,12 @@ export const InvoicesPage = () => {
 
   return (
     <main className="mx-auto w-full max-w-[1500px] space-y-5 pb-8 text-slate-800 ">
+      <SEO
+        title="Invoices | Vyapix"
+        description="View, search, download, and manage all your sales invoices."
+        path="/invoices"
+        noIndex={true}
+      />
       {/* Header */}
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-5  sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">

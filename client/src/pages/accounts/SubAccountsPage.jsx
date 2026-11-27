@@ -20,6 +20,7 @@ import accountService from '../../services/accountService';
 import { formatDateTime } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import SEO from '../../Components/common/SEO';
 
 export const SubAccountsPage = () => {
   const { isOwner } = useAuth();
@@ -118,6 +119,12 @@ export const SubAccountsPage = () => {
 
   return (
     <div className="space-y-5 text-slate-800">
+      <SEO
+        title="Sub-Accounts | Vyapix"
+        description="Manage cashier and sub-accounts for your shop."
+        path="/accounts"
+        noIndex={true}
+      />
       {/* Header */}
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

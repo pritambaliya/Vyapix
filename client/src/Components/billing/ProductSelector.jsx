@@ -10,6 +10,7 @@ import productService from '../../services/productService';
 import { formatCurrency } from '../../utils/formatters';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../context/ToastContext';
+import { getProductName, getCategoryName } from '../../utils/productHelpers';
 
 export const ProductSelector = ({
   onAddToCart,
@@ -36,7 +37,6 @@ export const ProductSelector = ({
       try {
         const params = {
           search: debouncedSearch || undefined,
-          category: selectedCategory || undefined,
           limit: 50,
         };
 
@@ -46,20 +46,16 @@ export const ProductSelector = ({
 
         if (cancelled) return;
 
-        if (res.success && res.data) {
-          const prods = res.data.products || [];
-          setProducts(prods);
+        // API returns { success, count, products } — not wrapped in data
+        const prods = res.products || res.data?.products || [];
+        setProducts(prods);
 
-          // Collect categories from the initial product list.
-          if (!selectedCategory && !debouncedSearch) {
-            const cats = Array.from(
-              new Set(prods.map((product) => product.category).filter(Boolean))
-            );
-
-            setCategories(cats);
-          }
-        } else {
-          setProducts([]);
+        // Collect categories from the initial product list.
+        if (!debouncedSearch) {
+          const cats = Array.from(
+            new Set(prods.map((p) => getCategoryName(p)).filter(Boolean))
+          );
+          setCategories(cats);
         }
       } catch {
         if (!cancelled) {
@@ -77,7 +73,12 @@ export const ProductSelector = ({
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, selectedCategory, isOwner]);
+  }, [debouncedSearch, isOwner]);
+
+  // Apply category filter client-side
+  const filteredProducts = selectedCategory
+    ? products.filter((p) => getCategoryName(p) === selectedCategory)
+    : products;
 
   // Barcode Scanner Handler
   const handleBarcodeSubmit = async (e) => {
@@ -90,8 +91,33 @@ export const ProductSelector = ({
     try {
       const res = await productService.getProductByBarcode(barcodeVal);
 
-      if (res.success && res.data?.product) {
-        onAddToCart(res.data.product);
+      if (res.success && (res.product || res.data?.product)) {
+        const prod = res.product || res.data.product;
+        const matchedVariant = res.matchedVariant || res.data?.matchedVariant;
+
+        // For variant products with barcode match, use variant data
+        if (matchedVariant && prod.sellingType === 'VARIANT') {
+          const productName = `${getProductName(prod)} – ${matchedVariant.variantName}`;
+          onAddToCart({
+            ...matchedVariant,
+            _id: prod._id,
+            productId: prod._id,
+            variantId: matchedVariant._id,
+            name: productName,
+            category: getCategoryName(prod),
+            unit: matchedVariant.unit || 'pcs',
+            sellingPrice: matchedVariant.sellingPrice,
+            gstRate: matchedVariant.gstRate ?? prod.gstRate ?? 0,
+            stock: matchedVariant.stock,
+          });
+        } else {
+          onAddToCart({
+            ...prod,
+            productId: prod._id,
+            name: getProductName(prod),
+            category: getCategoryName(prod),
+          });
+        }
         setSearch('');
       } else {
         warning(`No product found for barcode: ${barcodeVal}`);
@@ -162,7 +188,7 @@ export const ProductSelector = ({
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
         {loading ? (
           <TableSkeleton rows={8} cols={3} />
-        ) : products.length === 0 ? (
+        ) : filteredProducts.length === 0 ? (
           <div className="flex h-full min-h-40 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-200/50 p-6 text-center">
             <Package className="mb-3 h-9 w-9 text-slate-400" />
 
@@ -176,8 +202,10 @@ export const ProductSelector = ({
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-4">
-            {products.map((prod) => {
+            {filteredProducts.map((prod) => {
               const productId = prod._id || prod.id;
+              const productName = getProductName(prod);
+              const categoryName = getCategoryName(prod);
 
               const inCart = cartItems.find(
                 (item) => String(item.productId || item._id) === String(productId)
@@ -191,11 +219,16 @@ export const ProductSelector = ({
                   type="button"
                   onClick={() => {
                     if (!isOutOfStock) {
-                      onAddToCart(prod);
+                      onAddToCart({
+                        ...prod,
+                        productId,
+                        name: productName,
+                        category: categoryName,
+                      });
                     }
                   }}
                   disabled={isOutOfStock}
-                  aria-label={`Add ${prod.name} to cart`}
+                  aria-label={`Add ${productName} to cart`}
                   className={`flex min-h-[130px] flex-col justify-between rounded-xl border p-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
                     isOutOfStock
                       ? 'cursor-not-allowed border-slate-300 bg-slate-200/50 opacity-60'
@@ -208,7 +241,7 @@ export const ProductSelector = ({
                   <div className="w-full space-y-1.5">
                     <div className="flex items-start justify-between gap-1.5">
                       <h4 className="line-clamp-2 text-xs font-semibold leading-relaxed text-slate-900 sm:text-sm">
-                        {prod.name}
+                        {productName}
                       </h4>
 
                       {inCart && (
@@ -220,7 +253,7 @@ export const ProductSelector = ({
                     </div>
 
                     <p className="truncate text-[10px] text-slate-500">
-                      {prod.category || 'General'}
+                      {categoryName || 'General'}
                     </p>
                   </div>
 

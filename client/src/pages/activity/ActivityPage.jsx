@@ -7,6 +7,7 @@ import { TableSkeleton } from '../../Components/common/Skeleton';
 import accountService from '../../services/accountService';
 import { formatDateTime } from '../../utils/formatters';
 import { useToast } from '../../context/ToastContext';
+import SEO from '../../Components/common/SEO';
 
 export const ActivityPage = () => {
   const { error } = useToast();
@@ -90,6 +91,12 @@ export const ActivityPage = () => {
 
   return (
     <div className="min-h-full space-y-6 bg-[#FFFDF9]">
+      <SEO
+        title="Activity Log | Vyapix"
+        description="View all account activity, login events, and audit trail."
+        path="/activity"
+        noIndex={true}
+      />
       {/* Header */}
       <div className="flex flex-col gap-3 border-b border-orange-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>

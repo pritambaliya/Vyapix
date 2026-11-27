@@ -36,6 +36,8 @@ import {
   getProductName,
 } from '../../utils/productHelpers';
 
+import SEO from '../../Components/common/SEO';
+
 // --------------------------------------------------
 // HELPERS
 // --------------------------------------------------
@@ -535,6 +537,13 @@ export const ProductsPage = () => {
 
   return (
     <div className="min-h-full space-y-6 bg-[#fffaf5] p-1 sm:p-2">
+
+      <SEO
+        title="Products & Inventory | Vyapix"
+        description="Manage your product catalog, variants, pricing, GST, and stock levels."
+        path="/products"
+        noIndex={true}
+      />
 
       {/* PAGE HEADER */}
 

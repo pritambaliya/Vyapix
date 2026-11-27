@@ -5,51 +5,154 @@ import {
   Info,
   X,
 } from 'lucide-react';
+
 import { useToast } from '../../context/ToastContext';
 
-export const ToastContainer = () => {
-  const { toasts, removeToast } = useToast();
+const ToastContainer = () => {
+  const { toasts = [], removeToast } = useToast();
 
-  if (!toasts || toasts.length === 0) return null;
+  if (!toasts.length) return null;
 
-  const icons = {
-    success: <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />,
-    error: <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />,
-    warning: <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />,
-    info: <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />,
-  };
+  const toastStyles = {
+    success: {
+      icon: CheckCircle2,
+      iconColor: 'text-emerald-600',
+      border: 'border-emerald-200',
+      background: 'bg-white',
+      title: 'Success',
+      progress: 'bg-emerald-500',
+    },
 
-  const borders = {
-    success: 'border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900',
-    error: 'border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900',
-    warning: 'border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-900',
-    info: 'border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-900',
+    error: {
+      icon: AlertCircle,
+      iconColor: 'text-rose-600',
+      border: 'border-rose-200',
+      background: 'bg-white',
+      title: 'Something went wrong',
+      progress: 'bg-rose-500',
+    },
+
+    warning: {
+      icon: AlertTriangle,
+      iconColor: 'text-amber-600',
+      border: 'border-amber-200',
+      background: 'bg-white',
+      title: 'Warning',
+      progress: 'bg-amber-500',
+    },
+
+    info: {
+      icon: Info,
+      iconColor: 'text-blue-600',
+      border: 'border-blue-200',
+      background: 'bg-white',
+      title: 'Information',
+      progress: 'bg-blue-500',
+    },
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-md text-xs sm:text-sm text-slate-800 dark:text-slate-200 animate-fade-in ${
-            borders[toast.type] || borders.info
-          }`}
-          role="alert"
-        >
-          {icons[toast.type] || icons.info}
-          <div className="flex-1 font-medium leading-snug">
-            {toast.message}
-          </div>
-          <button
-            type="button"
-            onClick={() => removeToast(toast.id)}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded transition-colors"
-            aria-label="Dismiss toast"
+    <div
+      className="
+        fixed
+        top-4
+        left-1/2
+        -translate-x-1/2
+        z-[9999]
+        w-[calc(100%-2rem)]
+        max-w-md
+        flex
+        flex-col
+        gap-3
+        pointer-events-none
+      "
+      aria-live="polite"
+      aria-atomic="false"
+    >
+      {toasts.map((toast) => {
+        const type = toastStyles[toast.type]
+          ? toast.type
+          : 'info';
+
+        const style = toastStyles[type];
+        const Icon = style.icon;
+
+        return (
+          <div
+            key={toast.id}
+            role={type === 'error' ? 'alert' : 'status'}
+            className={`
+              pointer-events-auto
+              relative
+              overflow-hidden
+              flex
+              items-start
+              gap-3
+              p-4
+              rounded-2xl
+              border
+              ${style.border}
+              ${style.background}
+              shadow-[0_8px_30px_rgba(0,0,0,0.12)]
+              animate-[toastSlideDown_0.35s_ease-out]
+            `}
           >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      ))}
+            {/* ICON */}
+            <div className="
+              w-9 h-9
+              rounded-xl
+              bg-slate-50
+              flex
+              items-center
+              justify-center
+              shrink-0
+            ">
+              <Icon
+                className={`w-5 h-5 ${style.iconColor}`}
+                strokeWidth={2.2}
+              />
+            </div>
+
+            {/* MESSAGE */}
+            <div className="flex-1 min-w-0 pt-0.5">
+
+              <h4 className="text-sm font-semibold text-slate-900">
+                {toast.title || style.title}
+              </h4>
+
+              <p className="
+                mt-1
+                text-sm
+                text-slate-600
+                leading-relaxed
+                break-words
+              ">
+                {toast.message}
+              </p>
+
+            </div>
+
+            {/* CLOSE BUTTON */}
+            <button
+              type="button"
+              onClick={() => removeToast(toast.id)}
+              className="
+                shrink-0
+                p-1.5
+                rounded-lg
+                text-slate-400
+                hover:text-slate-700
+                hover:bg-slate-100
+                transition-all
+              "
+              aria-label="Dismiss notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+          </div>
+        );
+      })}
     </div>
   );
 };

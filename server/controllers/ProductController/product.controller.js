@@ -149,17 +149,28 @@ const validateVariantIdentifiers = async ({
     variants,
     excludeProductId = null
 }) => {
-    for (const variant of variants) {
+    const skuSet = new Set();
+    const barcodeSet = new Set();
 
-        if (variant.sku) {
+    for (const variant of variants) {
+        const sku = variant.sku?.trim().toUpperCase();
+        const barcode = variant.barcode?.trim();
+
+        if (sku) {
+            if (skuSet.has(sku)) {
+                throw new Error("DUPLICATE_SKU");
+            }
+
+            skuSet.add(sku);
+
             const existingSKU = await Product.findOne({
                 shopId,
                 ...(excludeProductId && {
                     _id: { $ne: excludeProductId }
                 }),
                 $or: [
-                    { sku: variant.sku },
-                    { "variants.sku": variant.sku }
+                    { sku },
+                    { "variants.sku": sku }
                 ]
             });
 
@@ -168,15 +179,21 @@ const validateVariantIdentifiers = async ({
             }
         }
 
-        if (variant.barcode) {
+        if (barcode) {
+            if (barcodeSet.has(barcode)) {
+                throw new Error("DUPLICATE_BARCODE");
+            }
+
+            barcodeSet.add(barcode);
+
             const existingBarcode = await Product.findOne({
                 shopId,
                 ...(excludeProductId && {
                     _id: { $ne: excludeProductId }
                 }),
                 $or: [
-                    { barcode: variant.barcode },
-                    { "variants.barcode": variant.barcode }
+                    { barcode },
+                    { "variants.barcode": barcode }
                 ]
             });
 
@@ -190,8 +207,7 @@ const validateVariantIdentifiers = async ({
 
 export const createProduct = async (req, res) => {
     try {
-        const ownerId = getOwnerId(req);
-        const shopId = getShopId(req);
+        const { ownerId, shopId } = getInventoryFilter(req);
 
         if (!ownerId || !shopId) {
             return res.status(401).json({
@@ -216,7 +232,6 @@ export const createProduct = async (req, res) => {
             variants
         } = req.body;
 
-        // Required fields validation
         if (
             !categoryId ||
             !mainProductId ||
@@ -225,11 +240,10 @@ export const createProduct = async (req, res) => {
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Category, main product, brand product and selling type are required"
+                message: "Required product details are missing"
             });
         }
 
-        // Validate ObjectIds
         if (
             !isValidId(categoryId) ||
             !isValidId(mainProductId) ||
@@ -241,7 +255,27 @@ export const createProduct = async (req, res) => {
             });
         }
 
-        // Validate catalogue references
+        // Check whether this Brand Product already has inventory.
+        const existingProduct = await Product.findOne({
+            ownerId,
+            shopId,
+            brandProductId,
+            isActive: true
+        });
+
+        if (existingProduct) {
+            const populatedProduct = await populateProduct(
+                Product.findById(existingProduct._id)
+            );
+
+            return res.status(409).json({
+                success: false,
+                alreadyExists: true,
+                message: "Product already exists. Please edit the existing product.",
+                product: populatedProduct
+            });
+        }
+
         await validateProductReferences({
             categoryId,
             mainProductId,
@@ -249,7 +283,6 @@ export const createProduct = async (req, res) => {
             ownerId
         });
 
-        // Validate selling configuration
         validateSellingConfiguration({
             sellingType,
             unit,
@@ -266,15 +299,13 @@ export const createProduct = async (req, res) => {
             mainProductId,
             brandProductId,
             sellingType,
-            gstRate: gstRate ?? 0
+            gstRate: Number(gstRate ?? 0)
         };
 
         if (sellingType === "LOOSE") {
-
             const normalizedSKU = sku?.trim().toUpperCase() || undefined;
             const normalizedBarcode = barcode?.trim() || undefined;
 
-            // Check duplicate identifiers
             await validateVariantIdentifiers({
                 shopId,
                 variants: [{
@@ -284,42 +315,39 @@ export const createProduct = async (req, res) => {
             });
 
             Object.assign(productData, {
-                unit: unit?.trim().toLowerCase(),
-                purchasePrice,
-                sellingPrice,
-                stock: stock ?? 0,
-                lowStockLimit: lowStockLimit ?? 5,
+                unit: unit.trim().toLowerCase(),
+                purchasePrice: Number(purchasePrice),
+                sellingPrice: Number(sellingPrice),
+                stock: Number(stock ?? 0),
+                lowStockLimit: Number(lowStockLimit ?? 5),
                 sku: normalizedSKU,
                 barcode: normalizedBarcode,
                 variants: []
             });
-
         }
 
-        else if (sellingType === "VARIANT") {
-
+        if (sellingType === "VARIANT") {
             const normalizedVariants = variants.map(variant => ({
-                ...variant,
-
                 variantName: variant.variantName.trim(),
-
+                quantity: Number(variant.quantity),
                 unit: variant.unit.trim().toLowerCase(),
-
+                purchasePrice: Number(variant.purchasePrice),
+                sellingPrice: Number(variant.sellingPrice),
+                gstRate: Number(variant.gstRate ?? gstRate ?? 0),
+                stock: Number(variant.stock ?? 0),
+                lowStockLimit: Number(variant.lowStockLimit ?? 5),
                 sku: variant.sku?.trim().toUpperCase() || undefined,
-
-                barcode: variant.barcode?.trim() || undefined
+                barcode: variant.barcode?.trim() || undefined,
+                isActive: true
             }));
 
-            // Check duplicate identifiers
             await validateVariantIdentifiers({
                 shopId,
                 variants: normalizedVariants
             });
 
-            // Parent-level identifiers must remain empty
             productData.sku = undefined;
             productData.barcode = undefined;
-
             productData.variants = normalizedVariants;
         }
 
@@ -336,7 +364,6 @@ export const createProduct = async (req, res) => {
         });
 
     } catch (error) {
-
         if (error.message === "CATEGORY_NOT_FOUND") {
             return res.status(404).json({
                 success: false,
@@ -373,15 +400,9 @@ export const createProduct = async (req, res) => {
         }
 
         if (error.code === 11000) {
-
-            console.error("Duplicate Key Error:", {
-                keyPattern: error.keyPattern,
-                keyValue: error.keyValue
-            });
-
             return res.status(409).json({
                 success: false,
-                message: "Duplicate SKU or barcode",
+                message: "A duplicate product or identifier already exists",
                 duplicateField: error.keyPattern,
                 duplicateValue: error.keyValue
             });
@@ -495,7 +516,14 @@ export const getProducts = async (req, res) => {
         return res.status(200).json({
             success: true,
             count: products.length,
-            products
+            products: products.map(p => {
+                const obj = p.toObject ? p.toObject() : { ...p };
+                // Add computed display fields for frontend convenience
+                obj.name = p.brandProductId?.name || p.brandProductId?.brandName || "Product";
+                obj.category = p.categoryId?.name || "";
+                obj.mainProduct = p.mainProductId?.name || "";
+                return obj;
+            })
         });
 
     } catch (error) {
@@ -505,6 +533,50 @@ export const getProducts = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Failed to fetch products"
+        });
+    }
+};
+
+export const getProductByBrandProduct = async (req, res) => {
+    try {
+        const { ownerId, shopId } = getInventoryFilter(req);
+        const { brandProductId } = req.params;
+
+        if (!ownerId || !shopId) {
+            return res.status(401).json({
+                success: false,
+                message: "Owner or shop not found"
+            });
+        }
+
+        if (!isValidId(brandProductId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid brand product ID"
+            });
+        }
+
+        const product = await populateProduct(
+            Product.findOne({
+                ownerId,
+                shopId,
+                brandProductId,
+                isActive: true
+            })
+        );
+
+        return res.status(200).json({
+            success: true,
+            exists: Boolean(product),
+            product: product || null
+        });
+
+    } catch (error) {
+        console.error("Get Product By Brand Product Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch product"
         });
     }
 };
@@ -929,9 +1001,15 @@ export const getInventoryHistory = async (req, res) => {
 
 export const updateProduct = async (req, res) => {
     try {
-
         const { ownerId, shopId } = getInventoryFilter(req);
         const { id } = req.params;
+
+        if (!ownerId || !shopId) {
+            return res.status(401).json({
+                success: false,
+                message: "Owner or shop not found"
+            });
+        }
 
         if (!isValidId(id)) {
             return res.status(400).json({
@@ -970,54 +1048,102 @@ export const updateProduct = async (req, res) => {
             variants
         } = req.body;
 
-        const nextSellingType = sellingType || product.sellingType;
-
-        const nextCategoryId = categoryId || product.categoryId;
-        const nextMainProductId = mainProductId || product.mainProductId;
-        const nextBrandProductId = brandProductId || product.brandProductId;
-
+        // Hierarchy cannot be changed after product creation.
         if (
-            categoryId !== undefined ||
-            mainProductId !== undefined ||
-            brandProductId !== undefined
+            (categoryId !== undefined &&
+                String(categoryId) !== String(product.categoryId)) ||
+            (mainProductId !== undefined &&
+                String(mainProductId) !== String(product.mainProductId)) ||
+            (brandProductId !== undefined &&
+                String(brandProductId) !== String(product.brandProductId))
         ) {
-
-            await validateProductReferences({
-                categoryId: nextCategoryId,
-                mainProductId: nextMainProductId,
-                brandProductId: nextBrandProductId,
-                ownerId
-            });
-
-            product.categoryId = nextCategoryId;
-            product.mainProductId = nextMainProductId;
-            product.brandProductId = nextBrandProductId;
-        }
-
-        if (nextSellingType !== product.sellingType) {
-
             return res.status(400).json({
                 success: false,
-                message: "Changing selling type requires a separate inventory conversion"
+                message: "Category, main product and brand product cannot be changed"
+            });
+        }
+
+        // Selling type cannot be changed.
+        if (
+            sellingType !== undefined &&
+            sellingType !== product.sellingType
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Selling type cannot be changed after product creation"
             });
         }
 
         if (gstRate !== undefined) {
-            product.gstRate = gstRate;
+            const rate = Number(gstRate);
+
+            if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid GST rate"
+                });
+            }
+
+            product.gstRate = rate;
         }
 
+        // LOOSE PRODUCT
         if (product.sellingType === "LOOSE") {
+            if (unit !== undefined) {
+                if (!unit.trim()) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Unit is required"
+                    });
+                }
 
-            if (unit !== undefined) product.unit = unit;
-            if (purchasePrice !== undefined) product.purchasePrice = purchasePrice;
-            if (sellingPrice !== undefined) product.sellingPrice = sellingPrice;
-            if (stock !== undefined) product.stock = stock;
-            if (lowStockLimit !== undefined) product.lowStockLimit = lowStockLimit;
-            if (sku !== undefined) product.sku = sku;
-            if (barcode !== undefined) product.barcode = barcode;
+                product.unit = unit.trim().toLowerCase();
+            }
 
-        } else if (product.sellingType === "VARIANT") {
+            if (purchasePrice !== undefined) {
+                product.purchasePrice = Number(purchasePrice);
+            }
 
+            if (sellingPrice !== undefined) {
+                product.sellingPrice = Number(sellingPrice);
+            }
+
+            if (stock !== undefined) {
+                product.stock = Number(stock);
+            }
+
+            if (lowStockLimit !== undefined) {
+                product.lowStockLimit = Number(lowStockLimit);
+            }
+
+            if (sku !== undefined) {
+                product.sku = sku?.trim().toUpperCase() || undefined;
+            }
+
+            if (barcode !== undefined) {
+                product.barcode = barcode?.trim() || undefined;
+            }
+
+            validateSellingConfiguration({
+                sellingType: "LOOSE",
+                unit: product.unit,
+                purchasePrice: product.purchasePrice,
+                sellingPrice: product.sellingPrice,
+                stock: product.stock
+            });
+
+            await validateVariantIdentifiers({
+                shopId,
+                excludeProductId: product._id,
+                variants: [{
+                    sku: product.sku,
+                    barcode: product.barcode
+                }]
+            });
+        }
+
+        // VARIANT PRODUCT
+        if (product.sellingType === "VARIANT") {
             if (!Array.isArray(variants) || variants.length === 0) {
                 return res.status(400).json({
                     success: false,
@@ -1025,21 +1151,69 @@ export const updateProduct = async (req, res) => {
                 });
             }
 
-            // Preserve existing variant IDs when editing.
-            // New variants receive new IDs automatically.
-            const updatedVariants = [];
+            const incomingIds = new Set();
 
-            for (const incoming of variants) {
+            const normalizedVariants = variants.map(incoming => {
+                if (
+                    !incoming.variantName?.trim() ||
+                    !incoming.unit?.trim() ||
+                    Number(incoming.quantity) <= 0 ||
+                    !Number.isFinite(Number(incoming.purchasePrice)) ||
+                    !Number.isFinite(Number(incoming.sellingPrice)) ||
+                    Number(incoming.purchasePrice) < 0 ||
+                    Number(incoming.sellingPrice) < 0 ||
+                    Number(incoming.stock ?? 0) < 0
+                ) {
+                    throw new Error("INVALID_VARIANT");
+                }
 
                 if (incoming._id) {
+                    if (!isValidId(incoming._id)) {
+                        throw new Error("INVALID_VARIANT_ID");
+                    }
 
+                    if (incomingIds.has(String(incoming._id))) {
+                        throw new Error("DUPLICATE_VARIANT_ID");
+                    }
+
+                    incomingIds.add(String(incoming._id));
+                }
+
+                return {
+                    ...incoming,
+                    variantName: incoming.variantName.trim(),
+                    quantity: Number(incoming.quantity),
+                    unit: incoming.unit.trim().toLowerCase(),
+                    purchasePrice: Number(incoming.purchasePrice),
+                    sellingPrice: Number(incoming.sellingPrice),
+                    gstRate: Number(incoming.gstRate ?? product.gstRate ?? 0),
+                    stock: incoming.stock === undefined
+                        ? undefined
+                        : Number(incoming.stock),
+                    lowStockLimit: Number(incoming.lowStockLimit ?? 5),
+                    sku: incoming.sku?.trim().toUpperCase() || undefined,
+                    barcode: incoming.barcode?.trim() || undefined
+                };
+            });
+
+            await validateVariantIdentifiers({
+                shopId,
+                excludeProductId: product._id,
+                variants: normalizedVariants
+            });
+
+            // Deactivate old variants first.
+            // Never physically remove them.
+            product.variants.forEach(existing => {
+                existing.isActive = false;
+            });
+
+            for (const incoming of normalizedVariants) {
+                if (incoming._id) {
                     const existing = product.variants.id(incoming._id);
 
                     if (!existing) {
-                        return res.status(404).json({
-                            success: false,
-                            message: "Variant not found"
-                        });
+                        throw new Error("VARIANT_NOT_FOUND");
                     }
 
                     existing.variantName = incoming.variantName;
@@ -1051,17 +1225,41 @@ export const updateProduct = async (req, res) => {
                     existing.lowStockLimit = incoming.lowStockLimit;
                     existing.sku = incoming.sku;
                     existing.barcode = incoming.barcode;
-                    existing.isActive = incoming.isActive ?? true;
 
-                    updatedVariants.push(existing);
+                    // Preserve stock unless explicitly updated.
+                    if (incoming.stock !== undefined) {
+                        existing.stock = incoming.stock;
+                    }
+
+                    existing.isActive = true;
 
                 } else {
-
-                    updatedVariants.push(incoming);
+                    product.variants.push({
+                        variantName: incoming.variantName,
+                        quantity: incoming.quantity,
+                        unit: incoming.unit,
+                        purchasePrice: incoming.purchasePrice,
+                        sellingPrice: incoming.sellingPrice,
+                        gstRate: incoming.gstRate,
+                        stock: incoming.stock ?? 0,
+                        lowStockLimit: incoming.lowStockLimit,
+                        sku: incoming.sku,
+                        barcode: incoming.barcode,
+                        isActive: true
+                    });
                 }
             }
 
-            product.variants = updatedVariants;
+            const activeVariants = product.variants.filter(
+                variant => variant.isActive
+            );
+
+            if (activeVariants.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "At least one active variant is required"
+                });
+            }
         }
 
         await product.save();
@@ -1077,21 +1275,44 @@ export const updateProduct = async (req, res) => {
         });
 
     } catch (error) {
+        if (
+            error.message === "DUPLICATE_SKU" ||
+            error.message === "DUPLICATE_BARCODE"
+        ) {
+            return res.status(409).json({
+                success: false,
+                message: error.message === "DUPLICATE_SKU"
+                    ? "SKU already exists in this shop"
+                    : "Barcode already exists in this shop"
+            });
+        }
 
-        if (error.message === "CATEGORY_NOT_FOUND" ||
-            error.message === "MAIN_PRODUCT_NOT_FOUND" ||
-            error.message === "BRAND_PRODUCT_NOT_FOUND") {
-
-            return res.status(404).json({
+        if (
+            error.message === "INVALID_VARIANT" ||
+            error.message === "INVALID_VARIANT_ID" ||
+            error.message === "DUPLICATE_VARIANT_ID"
+        ) {
+            return res.status(400).json({
                 success: false,
                 message: error.message
+            });
+        }
+
+        if (
+            error.message === "VARIANT_NOT_FOUND"
+        ) {
+            return res.status(404).json({
+                success: false,
+                message: "Variant not found"
             });
         }
 
         if (error.code === 11000) {
             return res.status(409).json({
                 success: false,
-                message: "Duplicate SKU or barcode"
+                message: "Duplicate SKU or barcode",
+                duplicateField: error.keyPattern,
+                duplicateValue: error.keyValue
             });
         }
 
@@ -1100,54 +1321,6 @@ export const updateProduct = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Failed to update product"
-        });
-    }
-};
-
-
-export const deleteProduct = async (req, res) => {
-    try {
-
-        const { ownerId, shopId } = getInventoryFilter(req);
-        const { id } = req.params;
-
-        if (!isValidId(id)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid product ID"
-            });
-        }
-
-        const product = await Product.findOne({
-            _id: id,
-            ownerId,
-            shopId,
-            isActive: true
-        });
-
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: "Product not found"
-            });
-        }
-
-        product.isActive = false;
-
-        await product.save();
-
-        return res.status(200).json({
-            success: true,
-            message: "Product deleted successfully"
-        });
-
-    } catch (error) {
-
-        console.error("Delete Product Error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to delete product"
         });
     }
 };
