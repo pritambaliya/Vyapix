@@ -20,6 +20,7 @@ import {
 
 import CreateBrandProductModal from "./CreateBrandProductModal";
 import productService from "../../../services/productService";
+import { useToast } from "../../../context/ToastContext";
 
 const getId = (item) => {
     const id = item?._id || item?.id || "";
@@ -30,12 +31,15 @@ const BrandProductStep = ({
     brandProducts = [],
     selectedBrandProductId,
     mainProductId,
+    loading = false,
     onSelect,
+    onDoubleClick,
     onBrandProductCreated,
     onBrandProductUpdated,
     onBrandProductDeleted,
     onBack,
 }) => {
+    const { success, error: showError } = useToast();
     const [search, setSearch] = useState("");
 
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -209,15 +213,17 @@ const BrandProductStep = ({
             onBrandProductDeleted?.(productId);
 
             setDeletingBrandProduct(null);
+            success("Brand product deleted successfully.");
         } catch (error) {
             console.error("Delete Brand Product Error:", error);
 
-            setDeleteError(
+            const msg =
                 error?.response?.data?.message ||
                 error?.response?.data?.error ||
                 error?.message ||
-                "Unable to delete brand product. Please try again."
-            );
+                "Unable to delete brand product. Please try again.";
+            setDeleteError(msg);
+            showError(msg);
         } finally {
             deleteLockRef.current = false;
             setDeleteLoading(false);
@@ -231,6 +237,11 @@ const BrandProductStep = ({
     const handleSelect = (item) => {
         setContextMenu(null);
         onSelect?.(item);
+    };
+
+    const handleDoubleClick = (item) => {
+        setContextMenu(null);
+        onDoubleClick?.(item);
     };
 
     // -----------------------------------------
@@ -306,7 +317,16 @@ const BrandProductStep = ({
 
             {/* BRAND PRODUCT GRID */}
 
-            {filteredProducts.length > 0 ? (
+            {loading ? (
+                <div className="flex min-h-[220px] w-full items-center justify-center">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                        <Loader2 className="h-7 w-7 animate-spin text-orange-500" />
+                        <p className="text-sm text-slate-500">
+                            Loading brand products...
+                        </p>
+                    </div>
+                </div>
+            ) : filteredProducts.length > 0 ? (
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
 
@@ -319,6 +339,7 @@ const BrandProductStep = ({
                                 key={getId(item)}
                                 type="button"
                                 onClick={() => handleSelect(item)}
+                                onDoubleClick={() => handleDoubleClick(item)}
                                 onContextMenu={(event) =>
                                     handleContextMenu(event, item)
                                 }

@@ -3,6 +3,7 @@ import MainProduct from "../../models/ProductModel/mainProduct.model.js";
 import Category from "../../models/ProductModel/category.model.js";
 import cloudinary from "../../config/clodanary.js";
 import uploadToCloudinary from "../../utils/uploadToCloudinary.js";
+import { generateUniqueSlug, attachDeterministicSlugs } from "../../utils/slugify.js";
 
 const getOwnerId = (req) => req.owner?._id || req.user?._id;
 
@@ -75,10 +76,17 @@ export const createMainProduct = async (req, res) => {
             }
         }
 
+        const slug = await generateUniqueSlug(MainProduct, name.trim(), {
+            categoryId,
+            isActive: true,
+            $or: [{ ownerId: null }, { ownerId }],
+        });
+
         // Create Main Product
         const mainProduct = await MainProduct.create({
             categoryId,
             name: name.trim(),
+            slug,
             image: imageUrl,
             ownerId
         });
@@ -151,10 +159,12 @@ export const getMainProducts = async (req, res) => {
             .populate("categoryId", "name")
             .sort({ name: 1 });
 
+        const enrichedMainProducts = attachDeterministicSlugs(mainProducts);
+
         return res.status(200).json({
             success: true,
-            count: mainProducts.length,
-            mainProducts
+            count: enrichedMainProducts.length,
+            mainProducts: enrichedMainProducts
         });
 
     } catch (error) {
@@ -319,6 +329,17 @@ export const updateMainProduct = async (req, res) => {
                 });
             }
         }
+
+        mainProduct.slug = await generateUniqueSlug(
+            MainProduct,
+            mainProduct.name,
+            {
+                categoryId: mainProduct.categoryId,
+                isActive: true,
+                $or: [{ ownerId: null }, { ownerId }],
+            },
+            mainProduct._id
+        );
 
         await mainProduct.save();
 

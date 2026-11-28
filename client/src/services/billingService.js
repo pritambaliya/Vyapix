@@ -88,6 +88,22 @@ export const billingService = {
     });
     return response.data;
   },
+
+  /**
+   * Get aggregated invoice overview, payment breakdown, and counter summary (Owner)
+   */
+  async getOwnerLedgerSummary(params = {}) {
+    const response = await api.get('/bills/ledger-summary', { params });
+    return response.data;
+  },
+
+  /**
+   * Get aggregated invoice overview (Billing Operator)
+   */
+  async getBillingLedgerSummary(params = {}) {
+    const response = await api.get('/bills/billing/ledger-summary', { params });
+    return response.data;
+  },
 };
 
 export default billingService;

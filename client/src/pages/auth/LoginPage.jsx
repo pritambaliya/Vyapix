@@ -13,7 +13,6 @@ import Input from '../../Components/common/Input';
 import Button from '../../Components/common/Button';
 import BrandLogo from '../../Components/common/BrandLogo';
 import SEO from '../../Components/common/SEO';
-import ToastContainer from '../../Components/common/ToastContainer';
 
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -173,9 +172,6 @@ export const LoginPage = () => {
         path="/login"
         noIndex
       />
-
-      {/* Toast notifications */}
-      <ToastContainer />
 
       {/* Loading overlay */}
       {loading && (

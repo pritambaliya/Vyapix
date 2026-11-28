@@ -20,6 +20,7 @@ import {
 
 import CreateMainProductModal from "./CreateMainProductModal";
 import productService from "../../../services/productService";
+import { useToast } from "../../../context/ToastContext";
 
 const getId = (item) => {
     const id = item?._id || item?.id || "";
@@ -30,12 +31,15 @@ const MainProductStep = ({
     mainProducts = [],
     selectedMainProductId,
     categoryId,
+    loading = false,
     onSelect,
+    onDoubleClick,
     onMainProductCreated,
     onMainProductUpdated,
     onMainProductDeleted,
     onBack,
 }) => {
+    const { success, error: showError } = useToast();
     const [search, setSearch] = useState("");
 
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -174,12 +178,14 @@ const MainProductStep = ({
             onMainProductDeleted?.(productId);
 
             setDeletingMainProduct(null);
+            success("Main product deleted successfully.");
         } catch (error) {
-            setDeleteError(
+            const msg =
                 error?.response?.data?.message ||
                 error?.response?.data?.error ||
-                "Unable to delete main product. Please try again."
-            );
+                "Unable to delete main product. Please try again.";
+            setDeleteError(msg);
+            showError(msg);
         } finally {
             deleteLockRef.current = false;
             setDeleteLoading(false);
@@ -193,6 +199,11 @@ const MainProductStep = ({
     const handleSelect = (item) => {
         setContextMenu(null);
         onSelect?.(item);
+    };
+
+    const handleDoubleClick = (item) => {
+        setContextMenu(null);
+        onDoubleClick?.(item);
     };
 
     // -----------------------------------------
@@ -268,7 +279,16 @@ const MainProductStep = ({
 
             {/* PRODUCT GRID */}
 
-            {filteredProducts.length > 0 ? (
+            {loading ? (
+                <div className="flex min-h-[220px] w-full items-center justify-center">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                        <Loader2 className="h-7 w-7 animate-spin text-orange-500" />
+                        <p className="text-sm text-slate-500">
+                            Loading main products...
+                        </p>
+                    </div>
+                </div>
+            ) : filteredProducts.length > 0 ? (
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
 
@@ -281,6 +301,7 @@ const MainProductStep = ({
                                 key={getId(item)}
                                 type="button"
                                 onClick={() => handleSelect(item)}
+                                onDoubleClick={() => handleDoubleClick(item)}
                                 onContextMenu={(event) =>
                                     handleContextMenu(event, item)
                                 }

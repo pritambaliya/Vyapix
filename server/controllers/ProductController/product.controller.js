@@ -29,8 +29,8 @@ const getInventoryFilter = (req) => ({
 const populateProduct = (query) => {
     return query
         .populate("categoryId", "name")
-        .populate("mainProductId", "name")
-        .populate("brandProductId", "name brandName");
+        .populate("mainProductId", "name image")
+        .populate("brandProductId", "name brandName image");
 };
 
 const validateProductReferences = async ({
@@ -493,7 +493,11 @@ export const getProducts = async (req, res) => {
             products = products.filter(product => {
 
                 const mainName = product.mainProductId?.name?.toLowerCase() || "";
-                const brandName = product.brandProductId?.brandName?.toLowerCase() || "";
+                const brandName = (
+                    product.brandProductId?.name ||
+                    product.brandProductId?.brandName ||
+                    ""
+                ).toLowerCase();
                 const categoryName = product.categoryId?.name?.toLowerCase() || "";
 
                 const variantMatch = product.variants?.some(variant =>
@@ -652,7 +656,7 @@ export const getProductByBarcode = async (req, res) => {
         })
             .populate("categoryId", "name")
             .populate("mainProductId", "name")
-            .populate("brandProductId", "name");
+            .populate("brandProductId", "name brandName");
 
         if (!product) {
             return res.status(404).json({

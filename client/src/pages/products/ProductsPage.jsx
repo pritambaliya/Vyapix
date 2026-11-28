@@ -10,9 +10,12 @@ import {
   Plus,
   Boxes,
   Package,
+  Archive,
+  X,
 } from 'lucide-react';
 
 import Button from '../../Components/common/Button';
+import Input from '../../Components/common/Input';
 import Pagination from '../../Components/common/Pagination';
 import ConfirmModal from '../../Components/common/ConfirmModal';
 import { TableSkeleton } from '../../Components/common/Skeleton';
@@ -136,14 +139,6 @@ export const ProductsPage = () => {
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyProductId, setHistoryProductId] = useState(null);
-
-  // --------------------------------------------------
-  // DELETE MODAL
-  // --------------------------------------------------
-
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [productToDelete, setProductToDelete] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // --------------------------------------------------
   // FETCH CATEGORIES
@@ -478,56 +473,192 @@ export const ProductsPage = () => {
   };
 
   // --------------------------------------------------
-  // DELETE PRODUCT
+  // HIDE / ARCHIVE MODAL (ALL 5 LEVELS)
   // --------------------------------------------------
 
-  const openDeleteModal = (product) => {
-    setProductToDelete(product);
-    setDeleteModalOpen(true);
+  const [hideTarget, setHideTarget] = useState(null);
+  const [hideLoading, setHideLoading] = useState(false);
+
+  const [editNameTarget, setEditNameTarget] = useState(null);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [editNameError, setEditNameError] = useState('');
+  const [editNameLoading, setEditNameLoading] = useState(false);
+
+  const openEditNameModal = ({ type, id, name }) => {
+    setEditNameTarget({ type, id, name });
+    setEditNameValue(name || '');
+    setEditNameError('');
   };
 
-  const closeDeleteModal = () => {
-    if (deleteLoading) return;
-
-    setDeleteModalOpen(false);
-    setProductToDelete(null);
+  const closeEditNameModal = () => {
+    if (editNameLoading) return;
+    setEditNameTarget(null);
+    setEditNameValue('');
+    setEditNameError('');
   };
 
-  const handleConfirmDelete = async () => {
-    if (!productToDelete) return;
+  const handleSaveEditName = async (event) => {
+    event?.preventDefault();
+    if (!editNameTarget?.id || editNameLoading) return;
 
-    const productId =
-      productToDelete._id || productToDelete.id;
-
-    if (!productId) {
-      error('Invalid product selected');
+    const trimmed = editNameValue.trim();
+    if (!trimmed) {
+      setEditNameError(
+        `${editNameTarget.type === 'category' ? 'Category' : 'Main Product'} name is required.`
+      );
       return;
     }
 
-    setDeleteLoading(true);
+    setEditNameLoading(true);
+    setEditNameError('');
 
     try {
-      await productService.deleteProduct(productId);
-
-      success('Product removed from active catalog');
-
-      setDeleteModalOpen(false);
-      setProductToDelete(null);
-
-      if (products.length === 1 && pagination.page > 1) {
-        setPagination((previous) => ({
-          ...previous,
-          page: previous.page - 1,
-        }));
+      if (editNameTarget.type === 'category') {
+        await productService.updateCategory(editNameTarget.id, { name: trimmed });
+        success('Category name updated successfully.');
       } else {
-        await fetchProducts();
+        await productService.updateMainProduct(editNameTarget.id, { name: trimmed });
+        success('Main Product name updated successfully.');
       }
+
+      setEditNameTarget(null);
+      setEditNameValue('');
+      await Promise.all([fetchProducts(), fetchCategories()]);
     } catch (err) {
-      error(
-        getErrorMessage(err, 'Failed to delete product')
-      );
+      const msg = getErrorMessage(err, 'Failed to update name');
+      setEditNameError(msg);
+      error(msg);
     } finally {
-      setDeleteLoading(false);
+      setEditNameLoading(false);
+    }
+  };
+
+  const openHideModal = (target) => {
+    setHideTarget(target);
+  };
+
+  const closeHideModal = () => {
+    if (hideLoading) return;
+    setHideTarget(null);
+  };
+
+  const openDeleteModal = (product) => {
+    if (!product) return;
+    openHideModal({
+      type: 'product',
+      id: product._id || product.id,
+      name: getProductName(product),
+      title: 'Hide Product',
+      description: `Are you sure you want to hide "${getProductName(product)}" from the active catalog? All variants of this product will be hidden from POS billing, while historical invoices and stock records remain safe.`,
+    });
+  };
+
+  const openHideCategoryModal = ({ id, name }) => {
+    openHideModal({
+      type: 'category',
+      id,
+      name,
+      variant: 'warning',
+      confirmText: 'Confirm Hide',
+      title: 'Hide Category',
+      description: `Are you sure you want to hide category "${name}"? All active Main Products, Brand Products, and Products under this category will also be archived. Historical invoices remain safe.`,
+    });
+  };
+
+  const openDeleteCategoryModal = ({ id, name }) => {
+    openHideModal({
+      type: 'deleteCategory',
+      id,
+      name,
+      variant: 'danger',
+      confirmText: 'Delete Category',
+      title: 'Delete Category',
+      description: `Are you sure you want to permanently delete category "${name}"? This will permanently delete the category along with all its Main Products, Brand Products, and inventory Products. This action cannot be undone.`,
+    });
+  };
+
+  const openHideMainProductModal = ({ id, name }) => {
+    openHideModal({
+      type: 'mainProduct',
+      id,
+      name,
+      variant: 'warning',
+      confirmText: 'Confirm Hide',
+      title: 'Hide Main Product',
+      description: `Are you sure you want to hide main product "${name}"? All active Brand Products and Products under it will also be archived. Historical invoices remain safe.`,
+    });
+  };
+
+  const openDeleteMainProductModal = ({ id, name }) => {
+    openHideModal({
+      type: 'deleteMainProduct',
+      id,
+      name,
+      variant: 'danger',
+      confirmText: 'Delete Main Product',
+      title: 'Delete Main Product',
+      description: `Are you sure you want to permanently delete main product "${name}"? This will permanently delete the main product along with all its Brand Products and inventory Products. This action cannot be undone.`,
+    });
+  };
+
+  const openHideVariantModal = (product, variant) => {
+    const productId = product?._id || product?.id;
+    const variantId = variant?._id || variant?.id;
+    const variantLabel = variant?.variantName || 'Variant';
+    openHideModal({
+      type: 'variant',
+      id: variantId,
+      productId,
+      name: `${getProductName(product)} – ${variantLabel}`,
+      title: 'Hide Variant',
+      description: `Are you sure you want to hide variant "${variantLabel}" of "${getProductName(product)}"? It will no longer appear in active POS billing or stock tables until restored.`,
+    });
+  };
+
+  const handleConfirmHide = async () => {
+    if (!hideTarget?.id) return;
+
+    setHideLoading(true);
+
+    try {
+      switch (hideTarget.type) {
+        case 'category':
+          await productService.deleteCategory(hideTarget.id);
+          success('Category hidden successfully.');
+          break;
+        case 'deleteCategory':
+          await productService.permanentDeleteCategory(hideTarget.id);
+          success('Category deleted successfully.');
+          break;
+        case 'mainProduct':
+          await productService.deleteMainProduct(hideTarget.id);
+          success('Main Product hidden successfully.');
+          break;
+        case 'deleteMainProduct':
+          await productService.permanentDeleteMainProduct(hideTarget.id);
+          success('Main Product deleted successfully.');
+          break;
+        case 'brandProduct':
+          await productService.deleteBrandProduct(hideTarget.id);
+          success(`Brand product "${hideTarget.name}" and related items archived`);
+          break;
+        case 'variant':
+          await productService.archiveVariant(hideTarget.productId, hideTarget.id);
+          success(`Variant "${hideTarget.name}" archived`);
+          break;
+        case 'product':
+        default:
+          await productService.deleteProduct(hideTarget.id);
+          success(`Product "${hideTarget.name}" archived`);
+          break;
+      }
+
+      setHideTarget(null);
+      await Promise.all([fetchProducts(), fetchCategories()]);
+    } catch (err) {
+      error(getErrorMessage(err, 'Failed to archive item'));
+    } finally {
+      setHideLoading(false);
     }
   };
 
@@ -568,14 +699,25 @@ export const ProductsPage = () => {
         </div>
 
         {isOwner && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={openAddProductModal}
-            icon={Plus}
-          >
-            Add New Product
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/products/archived')}
+              icon={Archive}
+            >
+              Archived Items
+            </Button>
+
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={openAddProductModal}
+              icon={Plus}
+            >
+              Add New Product
+            </Button>
+          </div>
         )}
 
       </div>
@@ -643,6 +785,13 @@ export const ProductsPage = () => {
             onViewHistory={openHistory}
             onEdit={openEditProductModal}
             onDelete={openDeleteModal}
+            onEditCategory={openEditNameModal}
+            onDeleteCategory={openDeleteCategoryModal}
+            onHideCategory={openHideCategoryModal}
+            onEditMainProduct={openEditNameModal}
+            onDeleteMainProduct={openDeleteMainProductModal}
+            onHideMainProduct={openHideMainProductModal}
+            onHideVariant={openHideVariantModal}
             search={search}
             categoryId={categoryId}
             lowStockOnly={lowStockOnly}
@@ -701,18 +850,96 @@ export const ProductsPage = () => {
         productId={historyProductId}
       />
 
-      {/* DELETE CONFIRMATION */}
+      {/* HIDE / DELETE CONFIRMATION */}
 
       <ConfirmModal
-        isOpen={deleteModalOpen}
-        onClose={closeDeleteModal}
-        onConfirm={handleConfirmDelete}
-        title="Delete Product"
-        message={`Are you sure you want to remove "${getProductName(productToDelete)}" from the active catalog? Historical invoice records will be preserved.`}
-        confirmText="Delete"
-        variant="danger"
-        loading={deleteLoading}
+        isOpen={Boolean(hideTarget)}
+        onClose={closeHideModal}
+        onConfirm={handleConfirmHide}
+        title={hideTarget?.title || 'Hide Item'}
+        message={hideTarget?.description || ''}
+        confirmText={hideTarget?.confirmText || 'Confirm Hide'}
+        variant={hideTarget?.variant || 'warning'}
+        loading={hideLoading}
       />
+
+      {/* EDIT CATEGORY / MAIN PRODUCT NAME MODAL */}
+
+      {editNameTarget && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeEditNameModal();
+          }}
+        >
+          <form
+            onSubmit={handleSaveEditName}
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-orange-100 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {editNameTarget.type === 'category'
+                    ? 'Edit Category Name'
+                    : 'Edit Main Product Name'}
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Update the display name in your product catalog
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditNameModal}
+                disabled={editNameLoading}
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+                aria-label="Close edit modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5">
+              <Input
+                label={
+                  editNameTarget.type === 'category'
+                    ? 'Category Name'
+                    : 'Main Product Name'
+                }
+                value={editNameValue}
+                onChange={(e) => {
+                  setEditNameValue(e.target.value);
+                  if (editNameError) setEditNameError('');
+                }}
+                error={editNameError}
+                placeholder="Enter name"
+                autoFocus
+                required
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={closeEditNameModal}
+                disabled={editNameLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={editNameLoading}
+                disabled={editNameLoading}
+              >
+                Save Name
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
 
     </div>
   );

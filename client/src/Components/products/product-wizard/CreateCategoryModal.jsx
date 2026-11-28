@@ -4,6 +4,7 @@ import { Plus, X, Pencil } from "lucide-react";
 import Input from "../../common/Input";
 import Button from "../../common/Button";
 import productService from "../../../services/productService";
+import { useToast } from "../../../context/ToastContext";
 
 const CreateCategoryModal = ({
     isOpen,
@@ -12,6 +13,7 @@ const CreateCategoryModal = ({
     onUpdated,
     category = null,
 }) => {
+    const { success, error: showError } = useToast();
     const [name, setName] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
@@ -74,6 +76,8 @@ const CreateCategoryModal = ({
                     _id: updatedCategory?._id || categoryId,
                     name: updatedCategory?.name || categoryName,
                 });
+
+                success("Category updated successfully.");
             } else {
                 const response =
                     await productService.createCategory(payload);
@@ -92,17 +96,19 @@ const CreateCategoryModal = ({
                 }
 
                 onCreated?.(createdCategory);
+                success("Category created successfully.");
             }
 
             setName("");
             onClose();
 
         } catch (err) {
-            setError(
+            const msg =
                 err?.response?.data?.message ||
                 err?.message ||
-                `Failed to ${isEditMode ? "update" : "create"} category.`
-            );
+                `Failed to ${isEditMode ? "update" : "create"} category.`;
+            setError(msg);
+            showError(msg);
         } finally {
             setLoading(false);
         }

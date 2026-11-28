@@ -3,6 +3,7 @@ import BrandProduct from "../../models/ProductModel/brandProduct.model.js";
 import MainProduct from "../../models/ProductModel/mainProduct.model.js";
 import cloudinary from "../../config/clodanary.js";
 import uploadToCloudinary from "../../utils/uploadToCloudinary.js";
+import { generateUniqueSlug, attachDeterministicSlugs } from "../../utils/slugify.js";
 
 const getOwnerId = (req) => req.owner?._id || req.user?._id;
 
@@ -73,10 +74,17 @@ export const createBrandProduct = async (req, res) => {
             }
         }
 
+        const slug = await generateUniqueSlug(BrandProduct, name.trim(), {
+            mainProductId,
+            isActive: true,
+            $or: [{ ownerId: null }, { ownerId }],
+        });
+
         const brandProduct = await BrandProduct.create({
             mainProductId,
             brandName: brandName?.trim() || "Unbranded",
             name: name.trim(),
+            slug,
             image: imageUrl,
             ownerId
         });
@@ -140,10 +148,12 @@ export const getBrandProducts = async (req, res) => {
             .populate("mainProductId", "name categoryId")
             .sort({ name: 1 });
 
+        const enrichedBrandProducts = attachDeterministicSlugs(brandProducts);
+
         return res.status(200).json({
             success: true,
-            count: brandProducts.length,
-            brandProducts
+            count: enrichedBrandProducts.length,
+            brandProducts: enrichedBrandProducts
         });
 
     } catch (error) {
@@ -312,6 +322,17 @@ export const updateBrandProduct = async (req, res) => {
                 });
             }
         }
+
+        brandProduct.slug = await generateUniqueSlug(
+            BrandProduct,
+            brandProduct.name,
+            {
+                mainProductId: brandProduct.mainProductId,
+                isActive: true,
+                $or: [{ ownerId: null }, { ownerId }],
+            },
+            brandProduct._id
+        );
 
         await brandProduct.save();
 

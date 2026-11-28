@@ -3,26 +3,38 @@ import express from "express";
 import authMiddleware from "../middleware/auth.middleware.js";
 
 import {
+    // List
+    getArchivedItems,
+
     // Archive
     archiveCategory,
     archiveMainProduct,
     archiveBrandProduct,
     archiveProduct,
+    archiveVariant,
 
     // Restore
     restoreCategory,
     restoreMainProduct,
     restoreBrandProduct,
     restoreProduct,
+    restoreVariant,
 
     // Permanent Delete
     permanentDeleteCategory,
     permanentDeleteMainProduct,
     permanentDeleteBrandProduct,
     permanentDeleteProduct,
+    permanentDeleteVariant,
 } from "../controllers/archive.controller.js";
 
 const router = express.Router();
+
+router.get(
+    "/",
+    authMiddleware,
+    getArchivedItems
+);
 
 
 // ======================================================
@@ -51,6 +63,12 @@ router.patch(
     "/product/:id/archive",
     authMiddleware,
     archiveProduct
+);
+
+router.patch(
+    "/product/:productId/variant/:variantId/archive",
+    authMiddleware,
+    archiveVariant
 );
 
 
@@ -82,6 +100,12 @@ router.patch(
     restoreProduct
 );
 
+router.patch(
+    "/product/:productId/variant/:variantId/restore",
+    authMiddleware,
+    restoreVariant
+);
+
 router.delete(
     "/category/:id/permanent",
     authMiddleware,
@@ -104,6 +128,12 @@ router.delete(
     "/product/:id/permanent",
     authMiddleware,
     permanentDeleteProduct
+);
+
+router.delete(
+    "/product/:productId/variant/:variantId/permanent",
+    authMiddleware,
+    permanentDeleteVariant
 );
 
 

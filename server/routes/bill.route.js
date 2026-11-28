@@ -1,5 +1,18 @@
 import express from "express";
-import {createBill, getBills, getBillingBills, getBillingBillById, getBillById, refundBill, downloadBillingBillPDF, downloadBillPDF, downloadBillingThermalBillPDF, downloadThermalBillPDF} from "../controllers/bill.controller.js";
+import {
+    createBill,
+    getBills,
+    getBillingBills,
+    getLedgerSummary,
+    exportBillsCsv,
+    getBillingBillById,
+    getBillById,
+    refundBill,
+    downloadBillingBillPDF,
+    downloadBillPDF,
+    downloadBillingThermalBillPDF,
+    downloadThermalBillPDF,
+} from "../controllers/bill.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
 import billingAuthMiddleware from "../middleware/billingAuth.middleware.js";
 import flexAuthMiddleware from "../middleware/flexAuth.middleware.js";
@@ -18,6 +31,18 @@ router.get(
     getBills
 );
 
+router.get(
+    "/ledger-summary",
+    authMiddleware,
+    getLedgerSummary
+);
+
+router.get(
+    "/export",
+    authMiddleware,
+    exportBillsCsv
+);
+
 router.patch(
     "/:id/refund",
     authMiddleware,
@@ -25,27 +50,21 @@ router.patch(
 );
 
 router.get(
-    "/:id/pdf",
-    authMiddleware,
-    downloadBillPDF
-);
-
-router.get(
-    "/:id/thermal",
-    authMiddleware,
-    downloadThermalBillPDF
-);
-
-router.get(
-    "/:id",
-    authMiddleware,
-    getBillById
-);
-
-router.get(
     "/billing",
     billingAuthMiddleware,
     getBillingBills
+);
+
+router.get(
+    "/billing/ledger-summary",
+    billingAuthMiddleware,
+    getLedgerSummary
+);
+
+router.get(
+    "/billing/export",
+    billingAuthMiddleware,
+    exportBillsCsv
 );
 
 router.get(
@@ -64,6 +83,24 @@ router.get(
     "/billing/:id",
     billingAuthMiddleware,
     getBillingBillById
+);
+
+router.get(
+    "/:id/pdf",
+    authMiddleware,
+    downloadBillPDF
+);
+
+router.get(
+    "/:id/thermal",
+    authMiddleware,
+    downloadThermalBillPDF
+);
+
+router.get(
+    "/:id",
+    authMiddleware,
+    getBillById
 );
 
 export default router;

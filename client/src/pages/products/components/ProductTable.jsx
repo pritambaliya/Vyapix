@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import {
     Package,
@@ -11,12 +11,14 @@ import {
     Tag,
     Folder,
     FolderOpen,
+    EyeOff,
 } from "lucide-react";
 
 import Badge from "../../../Components/common/Badge";
 import EmptyState from "../../../Components/common/EmptyState";
 
 import {
+    getId,
     getProductName,
     getCategoryName,
     getMainProductName,
@@ -65,10 +67,12 @@ const getVariantStock = (variant) =>
     ) || 0;
 
 const getVariants = (product) =>
-    product?.variants ||
-    product?.variantDetails ||
-    product?.productVariants ||
-    [];
+    (
+        product?.variants ||
+        product?.variantDetails ||
+        product?.productVariants ||
+        []
+    ).filter((variant) => variant?.isActive !== false);
 
 /* ----------------------------------
    VARIANT STOCK HELPERS
@@ -154,14 +158,76 @@ const ProductTable = ({
     onDelete,
 
     onAdjustVariantStock,
+    onEditCategory,
+    onDeleteCategory,
+    onHideCategory,
+    onEditMainProduct,
+    onDeleteMainProduct,
+    onHideMainProduct,
+    onHideVariant,
 
     search,
     categoryId,
     lowStockOnly,
 }) => {
     const [expandedCategories, setExpandedCategories] = useState({});
-    const [selectedMainProduct, setSelectedMainProduct] = useState(null);
+    const [selectedMainProductKey, setSelectedMainProductKey] = useState(null);
     const [expandedProducts, setExpandedProducts] = useState({});
+    const [contextMenu, setContextMenu] = useState(null);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        if (!contextMenu) return;
+
+        const handleOutsideClick = (event) => {
+            if (!menuRef.current?.contains(event.target)) {
+                setContextMenu(null);
+            }
+        };
+
+        const handleEscape = (event) => {
+            if (event.key === "Escape") {
+                setContextMenu(null);
+            }
+        };
+
+        const handleScroll = () => setContextMenu(null);
+
+        document.addEventListener("mousedown", handleOutsideClick);
+        document.addEventListener("keydown", handleEscape);
+        window.addEventListener("scroll", handleScroll, true);
+
+        return () => {
+            document.removeEventListener("mousedown", handleOutsideClick);
+            document.removeEventListener("keydown", handleEscape);
+            window.removeEventListener("scroll", handleScroll, true);
+        };
+    }, [contextMenu]);
+
+    const handleOpenContextMenu = (event, payload) => {
+        if (!isOwner || !payload?.id) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const menuWidth = 190;
+        const menuHeight = 165;
+
+        const x = Math.min(
+            event.clientX,
+            window.innerWidth - menuWidth - 10
+        );
+        const y = Math.min(
+            event.clientY,
+            window.innerHeight - menuHeight - 10
+        );
+
+        setContextMenu({
+            ...payload,
+            x: Math.max(10, x),
+            y: Math.max(10, y),
+        });
+    };
 
     /* ----------------------------------
          BUILD CATEGORY HIERARCHY
@@ -170,27 +236,40 @@ const ProductTable = ({
     const categoryGroups = useMemo(() => {
         const categoryMap = new Map();
         products.forEach((product) => {
+            const catId = String(getId(product?.categoryId) || "");
             const categoryName = getCategoryName(product) || "Uncategorized";
+            const catKey = catId || categoryName;
 
-            const mainProductName = getMainProductName(product) || "Other Products";
+            const mainId = String(getId(product?.mainProductId) || "");
+            const mainProductName = getMainProductName(product);
+            const resolvedMainName =
+                mainProductName && mainProductName !== "—"
+                    ? mainProductName
+                    : "Other Products";
+            const mainKey = `${catKey}::${mainId || resolvedMainName}`;
 
-            if (!categoryMap.has(categoryName)) {
-                categoryMap.set(categoryName, {
+            if (!categoryMap.has(catKey)) {
+                categoryMap.set(catKey, {
+                    id: catId,
+                    key: catKey,
                     name: categoryName,
                     mainProducts: new Map(),
                 });
             }
 
-            const category = categoryMap.get(categoryName);
+            const category = categoryMap.get(catKey);
 
-            if (!category.mainProducts.has(mainProductName)) {
-                category.mainProducts.set(mainProductName, {
-                    name: mainProductName,
+            if (!category.mainProducts.has(mainKey)) {
+                category.mainProducts.set(mainKey, {
+                    id: mainId,
+                    key: mainKey,
+                    name: resolvedMainName,
+                    categoryName,
                     products: [],
                 });
             }
 
-            category.mainProducts.get(mainProductName).products.push(product);
+            category.mainProducts.get(mainKey).products.push(product);
         });
 
         return Array.from(categoryMap.values())
@@ -223,7 +302,7 @@ const ProductTable = ({
 
     useEffect(() => {
         if (!categoryGroups.length) {
-            setSelectedMainProduct(null);
+            setSelectedMainProductKey(null);
             return;
         }
 
@@ -232,51 +311,55 @@ const ProductTable = ({
         );
 
         const selectedExists = allMainProducts.some(
-            (item) => item.name === selectedMainProduct,
+            (item) => item.key === selectedMainProductKey,
         );
 
         if (!selectedExists) {
-            setSelectedMainProduct(allMainProducts[0]?.name || null);
+            setSelectedMainProductKey(allMainProducts[0]?.key || null);
         }
 
         setExpandedCategories((previous) => {
             const updated = { ...previous };
             categoryGroups.forEach((category, index) => {
-                if (updated[category.name] === undefined) {
-                    updated[category.name] = index === 0;
+                if (updated[category.key] === undefined) {
+                    updated[category.key] = index === 0;
                 }
             });
 
             return updated;
         });
-    }, [categoryGroups, selectedMainProduct]);
+    }, [categoryGroups, selectedMainProductKey]);
 
     /* ----------------------------------
          SELECTED PRODUCTS
       ---------------------------------- */
 
-    const selectedProducts = useMemo(() => {
-        const category = categoryGroups.find((item) =>
-            item.mainProducts.some((main) => main.name === selectedMainProduct),
-        );
+    const selectedGroup = useMemo(() => {
+        for (const category of categoryGroups) {
+            const mainProduct = category.mainProducts.find(
+                (item) => item.key === selectedMainProductKey,
+            );
+            if (mainProduct) {
+                return {
+                    categoryName: category.name,
+                    mainProductName: mainProduct.name,
+                    products: mainProduct.products || [],
+                };
+            }
+        }
+        return { categoryName: "", mainProductName: "", products: [] };
+    }, [categoryGroups, selectedMainProductKey]);
 
-        if (!category) return [];
-
-        const mainProduct = category.mainProducts.find(
-            (item) => item.name === selectedMainProduct,
-        );
-
-        return mainProduct?.products || [];
-    }, [categoryGroups, selectedMainProduct]);
+    const selectedProducts = selectedGroup.products;
 
     /* ----------------------------------
          HANDLERS
       ---------------------------------- */
 
-    const toggleCategory = (categoryName) => {
+    const toggleCategory = (categoryKey) => {
         setExpandedCategories((previous) => ({
             ...previous,
-            [categoryName]: !previous[categoryName],
+            [categoryKey]: !previous[categoryKey],
         }));
     };
 
@@ -329,26 +412,35 @@ const ProductTable = ({
                 <div className="max-h-[500px] overflow-y-auto p-2">
                     {categoryGroups.map((category) => {
                         const isCategoryExpanded = Boolean(
-                            expandedCategories[category.name],
+                            expandedCategories[category.key],
                         );
 
                         const categoryHasSelection = category.mainProducts.some(
-                            (item) => item.name === selectedMainProduct,
+                            (item) => item.key === selectedMainProductKey,
                         );
 
                         return (
-                            <div key={category.name} className="mb-1">
+                            <div key={category.key} className="mb-1">
                                 {/* CATEGORY */}
 
-                                <button
-                                    type="button"
-                                    onClick={() => toggleCategory(category.name)}
-                                    className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition ${categoryHasSelection
+                                <div
+                                    className={`flex w-full items-center justify-between gap-1 rounded-lg px-2 py-2 transition ${categoryHasSelection
                                         ? "bg-orange-50 text-orange-700"
                                         : "text-slate-700 hover:bg-slate-50"
                                         }`}
                                 >
-                                    <div className="flex min-w-0 items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCategory(category.key)}
+                                        onContextMenu={(e) =>
+                                            handleOpenContextMenu(e, {
+                                                type: "category",
+                                                id: category.id,
+                                                name: category.name,
+                                            })
+                                        }
+                                        className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1 text-left"
+                                    >
                                         {isCategoryExpanded ? (
                                             <FolderOpen
                                                 size={17}
@@ -361,20 +453,28 @@ const ProductTable = ({
                                         <span className="truncate text-sm font-semibold">
                                             {category.name}
                                         </span>
-                                    </div>
+                                    </button>
 
-                                    <div className="flex shrink-0 items-center gap-2">
+                                    <div className="flex shrink-0 items-center gap-1">
                                         <span className="rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500">
                                             {category.mainProductCount}
                                         </span>
 
-                                        {isCategoryExpanded ? (
-                                            <ChevronDown size={15} />
-                                        ) : (
-                                            <ChevronRight size={15} />
-                                        )}
+
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleCategory(category.key)}
+                                            aria-label="Toggle category"
+                                            className="p-0.5"
+                                        >
+                                            {isCategoryExpanded ? (
+                                                <ChevronDown size={15} />
+                                            ) : (
+                                                <ChevronRight size={15} />
+                                            )}
+                                        </button>
                                     </div>
-                                </button>
+                                </div>
 
                                 {/* MAIN PRODUCTS */}
 
@@ -382,33 +482,46 @@ const ProductTable = ({
                                     <div className="ml-4 mt-1 space-y-1 border-l-2 border-slate-100 pl-3">
                                         {category.mainProducts.map((mainProduct) => {
                                             const isSelected =
-                                                selectedMainProduct === mainProduct.name;
+                                                selectedMainProductKey === mainProduct.key;
 
                                             return (
-                                                <button
-                                                    key={mainProduct.name}
-                                                    type="button"
-                                                    onClick={() =>
-                                                        setSelectedMainProduct(mainProduct.name)
-                                                    }
-                                                    className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left transition ${isSelected
+                                                <div
+                                                    key={mainProduct.key}
+                                                    className={`flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 transition ${isSelected
                                                         ? "bg-orange-500 text-white shadow-sm"
                                                         : "text-slate-600 hover:bg-orange-50 hover:text-orange-700"
                                                         }`}
                                                 >
-                                                    <span className="min-w-0 truncate text-xs font-medium">
-                                                        {mainProduct.name}
-                                                    </span>
-
-                                                    <span
-                                                        className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${isSelected
-                                                            ? "bg-white/20 text-white"
-                                                            : "bg-slate-100 text-slate-500"
-                                                            }`}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setSelectedMainProductKey(mainProduct.key)
+                                                        }
+                                                        onContextMenu={(e) =>
+                                                            handleOpenContextMenu(e, {
+                                                                type: "mainProduct",
+                                                                id: mainProduct.id,
+                                                                name: mainProduct.name,
+                                                                categoryName: category.name,
+                                                            })
+                                                        }
+                                                        className="flex min-w-0 flex-1 items-center justify-between gap-2 px-1 py-1 text-left"
                                                     >
-                                                        {mainProduct.products.length}
-                                                    </span>
-                                                </button>
+                                                        <span className="min-w-0 truncate text-xs font-medium">
+                                                            {mainProduct.name}
+                                                        </span>
+
+                                                        <span
+                                                            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${isSelected
+                                                                ? "bg-white/20 text-white"
+                                                                : "bg-slate-100 text-slate-500"
+                                                                }`}
+                                                        >
+                                                            {mainProduct.products.length}
+                                                        </span>
+                                                    </button>
+
+                                                </div>
                                             );
                                         })}
                                     </div>
@@ -429,7 +542,9 @@ const ProductTable = ({
                         <Package size={18} className="shrink-0 text-orange-500" />
                         <div className="min-w-0">
                             <h3 className="truncate text-sm font-bold text-slate-800">
-                                {selectedMainProduct || "Products"}
+                                {selectedGroup.categoryName
+                                    ? `${selectedGroup.categoryName} → ${selectedGroup.mainProductName}`
+                                    : selectedGroup.mainProductName || "Products"}
                             </h3>
                             <p className="text-[11px] text-slate-400">
                                 {selectedProducts.length} products
@@ -459,7 +574,167 @@ const ProductTable = ({
                         </p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
+                    <>
+                    {/* MOBILE CARD LIST */}
+                    <div className="divide-y divide-slate-100 md:hidden">
+                        {selectedProducts.map((product) => {
+                            const productId = String(product._id || product.id);
+                            const productName = getProductName(product);
+                            const isVariant = product.sellingType === "VARIANT";
+                            const variants = isVariant ? getVariants(product) : [];
+                            const totalVariantStock = isVariant ? getTotalVariantStock(variants) : 0;
+                            const stockSummary = getStockSummary(product);
+                            const displayedStock = isVariant ? totalVariantStock : stockSummary.totalStock;
+                            const parentStockStatus = isVariant
+                                ? getVariantParentStockStatus(product, totalVariantStock)
+                                : null;
+                            const price = getProductPrice(product);
+                            const costPrice = getProductCostPrice(product);
+                            const isExpanded = Boolean(expandedProducts[productId]);
+                            const brandName = getBrandName(product);
+
+                            return (
+                                <div key={`mobile-${productId}`} className="space-y-3 p-4">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex min-w-0 items-center gap-2.5">
+                                            {isVariant ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleVariants(productId)}
+                                                    aria-label="Toggle variants"
+                                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-orange-100 bg-orange-50 text-orange-600"
+                                                >
+                                                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                </button>
+                                            ) : (
+                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+                                                    <Package size={16} />
+                                                </div>
+                                            )}
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-slate-800">{productName}</p>
+                                                <p className="text-[11px] text-slate-500">
+                                                    {brandName} • {isVariant ? `${variants.length} variants` : (product.sku || product.barcode || "Loose")}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Badge variant={isVariant ? "info" : "default"} size="xs">
+                                            {isVariant ? "Variant" : "Loose"}
+                                        </Badge>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-2.5 text-xs">
+                                        <div>
+                                            <span className="text-[10px] text-slate-400">Selling</span>
+                                            <p className="font-bold text-slate-800">{formatPriceRange(price, formatCurrency)}</p>
+                                        </div>
+                                        {isOwner && (
+                                            <div>
+                                                <span className="text-[10px] text-slate-400">Cost</span>
+                                                <p className="font-medium text-slate-600">{formatPriceRange(costPrice, formatCurrency)}</p>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <span className="text-[10px] text-slate-400">Stock</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-bold text-slate-800">{displayedStock} {product.unit || "pcs"}</span>
+                                                {isVariant && parentStockStatus && (
+                                                    <Badge variant={parentStockStatus.variant} size="xs">{parentStockStatus.label}</Badge>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] text-slate-400">GST</span>
+                                            <p className="font-semibold text-slate-600">{product.gstRate ?? 0}%</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                        {isOwner && !isVariant && onAdjustStock && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onAdjustStock(product)}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700"
+                                            >
+                                                <Sliders size={13} /> Stock
+                                            </button>
+                                        )}
+                                        {onViewHistory && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onViewHistory(product)}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600"
+                                            >
+                                                <History size={13} /> History
+                                            </button>
+                                        )}
+                                        {isOwner && onEdit && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onEdit(product)}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"
+                                            >
+                                                <Edit2 size={13} /> Edit
+                                            </button>
+                                        )}
+                                        {isOwner && onDelete && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onDelete(product)}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700"
+                                            >
+                                                <EyeOff size={13} /> Hide Product
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {isVariant && isExpanded && variants.length > 0 && (
+                                        <div className="space-y-2 border-t border-orange-100 pt-2">
+                                            {variants.map((variant) => {
+                                                const vId = getVariantId(variant);
+                                                const vStock = getVariantStock(variant);
+                                                const vStatus = getVariantStatus(variant);
+                                                return (
+                                                    <div key={vId} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-xs">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate font-semibold text-slate-800">{getVariantName(variant)}</p>
+                                                            <p className="text-[11px] text-slate-500">
+                                                                {formatCurrency(variant.sellingPrice)} • {vStock} {variant.unit || "pcs"}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex shrink-0 items-center gap-1.5">
+                                                            <Badge variant={vStatus.variant} size="xs">{vStatus.label}</Badge>
+                                                            {isOwner && onAdjustVariantStock && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => onAdjustVariantStock(product, variant)}
+                                                                    className="rounded border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-700"
+                                                                >
+                                                                    Adjust
+                                                                </button>
+                                                            )}
+                                                            {isOwner && onHideVariant && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => onHideVariant(product, variant)}
+                                                                    className="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-700"
+                                                                >
+                                                                    Hide
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* DESKTOP TABLE */}
+                    <div className="hidden overflow-x-auto md:block">
                         <table className="w-full min-w-[850px] text-left text-sm">
                             <thead>
                                 <tr className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -677,9 +952,10 @@ const ProductTable = ({
                                                                     type="button"
                                                                     onClick={() => onDelete?.(product)}
                                                                     className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                                                                    title="Delete"
+                                                                    title="Hide product"
+                                                                    aria-label={`Hide product ${productName}`}
                                                                 >
-                                                                    <Trash2 size={15} />
+                                                                    <EyeOff size={15} />
                                                                 </button>
                                                             </>
                                                         ) : (
@@ -796,7 +1072,7 @@ const ProductTable = ({
 
                                                                                 {isOwner && (
                                                                                     <td className="px-3 py-3">
-                                                                                        <div className="flex justify-end">
+                                                                                        <div className="flex justify-end gap-1">
                                                                                             <button
                                                                                                 type="button"
                                                                                                 onClick={() =>
@@ -811,6 +1087,22 @@ const ProductTable = ({
                                                                                             >
                                                                                                 <Sliders size={14} />
                                                                                             </button>
+                                                                                            {onHideVariant && (
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    onClick={() =>
+                                                                                                        onHideVariant(
+                                                                                                            product,
+                                                                                                            variant,
+                                                                                                        )
+                                                                                                    }
+                                                                                                    className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                                                                                                    title="Hide variant"
+                                                                                                    aria-label={`Hide variant ${variantName}`}
+                                                                                                >
+                                                                                                    <EyeOff size={14} />
+                                                                                                </button>
+                                                                                            )}
                                                                                         </div>
                                                                                     </td>
                                                                                 )}
@@ -850,8 +1142,84 @@ const ProductTable = ({
                             </tbody>
                         </table>
                     </div>
+                    </>
                 )}
             </section>
+
+            {/* RIGHT-CLICK CONTEXT MENU (CATEGORY & MAIN PRODUCT) */}
+            {contextMenu && (
+                <div
+                    ref={menuRef}
+                    role="menu"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="fixed z-[200] w-48 overflow-hidden rounded-xl border border-orange-100 bg-white p-1.5 shadow-xl"
+                >
+                    <div className="border-b border-slate-100 px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-orange-600">
+                            {contextMenu.type === "category" ? "Category" : "Main Product"}
+                        </p>
+                        <p className="truncate text-xs font-semibold text-slate-800">
+                            {contextMenu.name}
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                            const target = contextMenu;
+                            setContextMenu(null);
+                            if (target.type === "category") {
+                                onEditCategory?.(target);
+                            } else {
+                                onEditMainProduct?.(target);
+                            }
+                        }}
+                        className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-orange-50 hover:text-orange-700"
+                    >
+                        <Edit2 size={14} className="text-slate-400" />
+                        Edit Name
+                    </button>
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                            const target = contextMenu;
+                            setContextMenu(null);
+                            if (target.type === "category") {
+                                onDeleteCategory?.(target);
+                            } else {
+                                onDeleteMainProduct?.(target);
+                            }
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                    >
+                        <Trash2 size={14} />
+                        Delete
+                    </button>
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                            const target = contextMenu;
+                            setContextMenu(null);
+                            if (target.type === "category") {
+                                onHideCategory?.(target);
+                            } else {
+                                onHideMainProduct?.(target);
+                            }
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-amber-700 transition hover:bg-amber-50"
+                    >
+                        <EyeOff size={14} />
+                        Hide
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

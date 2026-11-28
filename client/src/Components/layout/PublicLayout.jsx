@@ -1,7 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import PublicNavbar from './PublicNavbar';
 import PublicFooter from './PublicFooter';
-import ToastContainer from '../common/ToastContainer';
 
 export const PublicLayout = ({ children }) => {
   return (
@@ -11,7 +10,6 @@ export const PublicLayout = ({ children }) => {
         {children || <Outlet />}
       </main>
       <PublicFooter />
-      <ToastContainer />
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ImagePlus, X, Plus, Save } from "lucide-react";
 
 import productService from "../../../services/productService";
+import { useToast } from "../../../context/ToastContext";
 
 const getId = (item) => item?._id || item?.id || "";
 
@@ -13,6 +14,7 @@ const CreateBrandProductModal = ({
     onCreated,
     onUpdated,
 }) => {
+    const { success, error: showError } = useToast();
     const isEdit = Boolean(brandProduct);
 
     const [brandName, setBrandName] = useState("");
@@ -165,6 +167,11 @@ const CreateBrandProductModal = ({
                 };
 
                 onUpdated?.(updatedProduct);
+                success(
+                    image
+                        ? "Brand product and image updated successfully."
+                        : "Brand product updated successfully."
+                );
             } else {
                 if (!result?._id && !result?.id) {
                     throw new Error(
@@ -173,6 +180,7 @@ const CreateBrandProductModal = ({
                 }
 
                 onCreated?.(result);
+                success("Brand product created successfully.");
             }
 
             resetForm();
@@ -184,11 +192,12 @@ const CreateBrandProductModal = ({
                 err
             );
 
-            setError(
+            const msg =
                 err?.response?.data?.message ||
                 err?.message ||
-                `Failed to ${isEdit ? "update" : "create"} brand product.`
-            );
+                `Failed to ${isEdit ? "update" : "create"} brand product.`;
+            setError(msg);
+            showError(msg);
         } finally {
             setLoading(false);
         }

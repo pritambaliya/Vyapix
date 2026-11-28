@@ -1,5 +1,32 @@
 import api from './api';
 
+const resolveId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'object') {
+    if (value._id) return resolveId(value._id);
+    if (value.id) return resolveId(value.id);
+    if (value.mainProductId) return resolveId(value.mainProductId);
+    if (value.categoryId) return resolveId(value.categoryId);
+    if (value.brandProductId) return resolveId(value.brandProductId);
+  }
+  return '';
+};
+
+const normalizeParams = (params = {}) => {
+  const next = { ...params };
+  if (next.categoryId !== undefined) {
+    next.categoryId = resolveId(next.categoryId) || undefined;
+  }
+  if (next.mainProductId !== undefined) {
+    next.mainProductId = resolveId(next.mainProductId) || undefined;
+  }
+  if (next.brandProductId !== undefined) {
+    next.brandProductId = resolveId(next.brandProductId) || undefined;
+  }
+  return next;
+};
+
 const productService = {
 
   // ======================================================
@@ -47,12 +74,15 @@ const productService = {
   // ======================================================
 
   async getMainProducts(params = {}) {
-    const response = await api.get('/main-products', { params });
+    const response = await api.get('/main-products', {
+      params: normalizeParams(params),
+    });
     return response.data;
   },
 
   async getMainProductById(id) {
-    const response = await api.get(`/main-products/${id}`);
+    const resolved = resolveId(id);
+    const response = await api.get(`/main-products/${resolved}`);
     return response.data;
   },
 
@@ -87,12 +117,15 @@ const productService = {
   // ======================================================
 
   async getBrandProducts(params = {}) {
-    const response = await api.get('/brand-products', { params });
+    const response = await api.get('/brand-products', {
+      params: normalizeParams(params),
+    });
     return response.data;
   },
 
   async getBrandProductById(id) {
-    const response = await api.get(`/brand-products/${id}`);
+    const resolved = resolveId(id);
+    const response = await api.get(`/brand-products/${resolved}`);
     return response.data;
   },
 
@@ -171,6 +204,32 @@ const productService = {
 
   async permanentDeleteProduct(id) {
     const response = await api.delete(`/archive/product/${id}/permanent`);
+    return response.data;
+  },
+
+  async getArchivedItems() {
+    const response = await api.get('/archive');
+    return response.data;
+  },
+
+  async archiveVariant(productId, variantId) {
+    const response = await api.patch(
+      `/archive/product/${productId}/variant/${variantId}/archive`
+    );
+    return response.data;
+  },
+
+  async restoreVariant(productId, variantId) {
+    const response = await api.patch(
+      `/archive/product/${productId}/variant/${variantId}/restore`
+    );
+    return response.data;
+  },
+
+  async permanentDeleteVariant(productId, variantId) {
+    const response = await api.delete(
+      `/archive/product/${productId}/variant/${variantId}/permanent`
+    );
     return response.data;
   },
 

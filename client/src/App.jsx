@@ -2,6 +2,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
+import { FullscreenProvider } from './context/FullscreenContext';
 
 import AppRoutes from './routes/AppRoutes';
 
@@ -18,15 +19,16 @@ function App() {
     <HelmetProvider>
       <ToastProvider>
         <AuthProvider>
-          <BrowserRouter>
-            <ScrollToTop />
-            <AppRoutes />
-            <CookieConsent />
-          </BrowserRouter>
+          <FullscreenProvider>
+            <BrowserRouter>
+              <ScrollToTop />
+              <AppRoutes />
+              <CookieConsent />
+            </BrowserRouter>
+          </FullscreenProvider>
         </AuthProvider>
         <ToastContainer />
         <ConfirmDialog />
-
       </ToastProvider>
     </HelmetProvider>
   );

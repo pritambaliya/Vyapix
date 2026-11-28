@@ -3,6 +3,7 @@ import Category from "../../models/ProductModel/category.model.js";
 import MainProduct from "../../models/ProductModel/mainProduct.model.js";
 import BrandProduct from "../../models/ProductModel/brandProduct.model.js";
 import Product from "../../models/ProductModel/product.model.js";
+import { generateUniqueSlug, attachDeterministicSlugs } from "../../utils/slugify.js";
 
 const getOwnerId = (req) => req.owner?._id || req.user?._id;
 
@@ -41,8 +42,14 @@ export const createCategory = async (req, res) => {
             });
         }
 
+        const slug = await generateUniqueSlug(Category, categoryName, {
+            isActive: true,
+            $or: [{ ownerId: null }, { ownerId }],
+        });
+
         const category = await Category.create({
             name: categoryName,
+            slug,
             ownerId
         });
 
@@ -88,10 +95,12 @@ export const getCategories = async (req, res) => {
             ]
         }).sort({ name: 1 });
 
+        const enrichedCategories = attachDeterministicSlugs(categories);
+
         return res.status(200).json({
             success: true,
-            count: categories.length,
-            categories
+            count: enrichedCategories.length,
+            categories: enrichedCategories
         });
 
     } catch (error) {
@@ -125,7 +134,10 @@ export const getCategoriesbyId = async (req, res) => {
 
         const category = await Category.findOne({
             _id: id,
-            ownerId
+            $or: [
+                { ownerId: null },
+                { ownerId }
+            ]
         });
 
          return res.status(200).json({
@@ -174,7 +186,10 @@ export const updateCategory = async (req, res) => {
         // Only owner-created categories can be updated
         const category = await Category.findOne({
             _id: id,
-            ownerId
+            $or: [
+                { ownerId: null },
+                { ownerId }
+            ]
         });
 
         if (!category) {
@@ -200,6 +215,12 @@ export const updateCategory = async (req, res) => {
         }
 
         category.name = categoryName;
+        category.slug = await generateUniqueSlug(
+            Category,
+            categoryName,
+            { isActive: true, $or: [{ ownerId: null }, { ownerId }] },
+            category._id
+        );
 
         await category.save();
 

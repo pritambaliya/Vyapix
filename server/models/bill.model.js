@@ -8,6 +8,16 @@ const billItemSchema = new mongoose.Schema(
             required: true,
         },
 
+        variantId: {
+            type: mongoose.Schema.Types.ObjectId,
+            default: null,
+        },
+
+        variantName: {
+            type: String,
+            default: null,
+        },
+
         name: {
             type: String,
             required: true,

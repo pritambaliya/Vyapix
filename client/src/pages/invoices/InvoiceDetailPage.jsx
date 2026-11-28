@@ -25,7 +25,7 @@ import Skeleton from '../../Components/common/Skeleton';
 import billingService from '../../services/billingService';
 import SEO from '../../Components/common/SEO';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
-import { downloadPdfBlob } from '../../utils/downloadPdf';
+import { downloadPdfBlob, previewOrPrintPdfBlob } from '../../utils/downloadPdf';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -115,6 +115,21 @@ export const InvoiceDetailPage = () => {
     }
   };
 
+  const handlePrintA4 = async () => {
+    setDownloadingA4(true);
+    try {
+      const blob = isOwner
+        ? await billingService.downloadOwnerBillPDF(id)
+        : await billingService.downloadBillingBillPDF(id);
+
+      previewOrPrintPdfBlob(blob);
+    } catch {
+      error('Failed to open invoice for printing');
+    } finally {
+      setDownloadingA4(false);
+    }
+  };
+
   const handleRefund = async () => {
     setRefundLoading(true);
     try {
@@ -189,6 +204,15 @@ export const InvoiceDetailPage = () => {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handlePrintA4}
+            loading={downloadingA4}
+            icon={Printer}
+          >
+            Print Invoice
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -305,14 +329,33 @@ export const InvoiceDetailPage = () => {
           <div className="grid grid-cols-2 gap-x-5 gap-y-4 rounded-xl bg-slate-50 p-4  sm:min-w-64 sm:grid-cols-1 sm:gap-y-3">
             <MetaItem icon={FileText} label="Invoice number" value={bill.invoiceNumber} />
             <MetaItem icon={CalendarDays} label="Invoice date" value={formatDateTime(bill.createdAt)} />
-            <MetaItem icon={CreditCard} label="Payment method" value={bill.paymentMethod} />
-            {bill.billingAccountId && (
-              <MetaItem
-                icon={UserRound}
-                label="Cashier"
-                value={bill.billingAccountId.name || bill.billingAccountId.accountNumber}
-              />
-            )}
+            <MetaItem
+              icon={CreditCard}
+              label="Payment"
+              value={`${String(bill.paymentMethod || '—').toUpperCase()} (${bill.paymentStatus || 'paid'})`}
+            />
+            <MetaItem
+              icon={Store}
+              label="Counter"
+              value={
+                bill.billingAccountId
+                  ? `${bill.billingAccountId.name || bill.billingAccountId.accountNumber}${bill.billingAccountId.accountNumber && bill.billingAccountId.name ? ` (${bill.billingAccountId.accountNumber})` : ''}`
+                  : bill.ownerId
+                    ? 'Owner Desk'
+                    : 'Counter information unavailable'
+              }
+            />
+            <MetaItem
+              icon={UserRound}
+              label="Cashier"
+              value={
+                bill.billingAccountId
+                  ? bill.billingAccountId.employeeName || bill.billingAccountId.name || '—'
+                  : bill.ownerId?.name
+                    ? `${bill.ownerId.name} (Owner)`
+                    : '—'
+              }
+            />
           </div>
         </div>
 
@@ -379,6 +422,9 @@ export const InvoiceDetailPage = () => {
                       <td className="px-4 py-4 text-xs font-semibold text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
                       <td className="px-4 py-4">
                         <p className="font-bold text-slate-900 ">{item.name}</p>
+                        {item.variantName && (
+                          <p className="mt-0.5 text-xs font-medium text-orange-600">Variant: {item.variantName}</p>
+                        )}
                         {item.sku && (
                           <p className="mt-1 text-xs text-slate-500 ">SKU: {item.sku}</p>
                         )}

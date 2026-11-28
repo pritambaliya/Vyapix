@@ -39,30 +39,50 @@ export const ToastProvider = ({ children }) => {
     ({
       message,
       type = 'info',
-      duration = 3500,
+      duration = 3000,
       title,
     }) => {
-      const id =
-        Date.now().toString() +
-        Math.random().toString(36).slice(2, 7);
+      const normalizedMessage = String(message || '').trim();
+      if (!normalizedMessage) return null;
 
-      const newToast = {
-        id,
-        message,
-        type,
-        title,
-        duration,
-      };
+      let createdId = null;
 
-      setToasts((prev) => [...prev, newToast]);
+      setToasts((prev) => {
+        const isDuplicate = prev.some(
+          (toast) =>
+            toast.type === type &&
+            String(toast.message || '').trim() === normalizedMessage
+        );
 
-      if (duration > 0) {
-        timersRef.current[id] = setTimeout(() => {
-          removeToast(id);
-        }, duration);
-      }
+        if (isDuplicate) {
+          return prev;
+        }
 
-      return id;
+        const id =
+          Date.now().toString() +
+          Math.random().toString(36).slice(2, 7);
+
+        createdId = id;
+
+        const newToast = {
+          id,
+          message: normalizedMessage,
+          type,
+          title,
+          duration,
+        };
+
+        if (duration > 0) {
+          timersRef.current[id] = setTimeout(() => {
+            removeToast(id);
+          }, duration);
+        }
+
+        const next = [...prev, newToast];
+        return next.length > 3 ? next.slice(next.length - 3) : next;
+      });
+
+      return createdId;
     },
     [removeToast]
   );
@@ -77,7 +97,7 @@ export const ToastProvider = ({ children }) => {
         message,
         type: 'success',
         title,
-        duration: 3500,
+        duration: 3000,
       });
     },
     [addToast]
@@ -89,7 +109,7 @@ export const ToastProvider = ({ children }) => {
         message,
         type: 'error',
         title,
-        duration: 5000,
+        duration: 4000,
       });
     },
     [addToast]
@@ -101,7 +121,7 @@ export const ToastProvider = ({ children }) => {
         message,
         type: 'warning',
         title,
-        duration: 4000,
+        duration: 3000,
       });
     },
     [addToast]
@@ -113,7 +133,7 @@ export const ToastProvider = ({ children }) => {
         message,
         type: 'info',
         title,
-        duration: 3500,
+        duration: 3000,
       });
     },
     [addToast]

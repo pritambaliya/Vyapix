@@ -27,13 +27,20 @@ export const CheckoutModal = ({
   totals,
   discount,
   setDiscount,
+  initialPaymentMethod = 'cash',
   onConfirmCheckout,
   loading = false,
 }) => {
-  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentMethod, setPaymentMethod] = useState(initialPaymentMethod);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [notes, setNotes] = useState('');
+
+  React.useEffect(() => {
+    if (isOpen && initialPaymentMethod) {
+      setPaymentMethod(initialPaymentMethod);
+    }
+  }, [isOpen, initialPaymentMethod]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -97,10 +104,10 @@ export const CheckoutModal = ({
                   type="button"
                   onClick={() => setPaymentMethod(method.id)}
                   aria-pressed={isSelected}
-                  className={`flex flex-col items-center gap-2 rounded-lg border p-3 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                  className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 ${
                     isSelected
-                      ? 'border-emerald-500 bg-emerald-100/70 font-semibold text-emerald-800 shadow-sm'
-                      : 'border-slate-300 bg-slate-100 text-slate-600 hover:border-slate-400 hover:bg-slate-200'
+                      ? 'border-orange-500 bg-orange-50 font-semibold text-orange-700 shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-orange-300 hover:bg-orange-50/40'
                   }`}
                 >
                   <Icon className="h-5 w-5" />

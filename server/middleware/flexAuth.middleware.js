@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import Owner from "../models/owner.model.js";
+import Shop from "../models/shop.model.js";
 import BillingAccount from "../models/billingAccount.model.js";
 
 /**
@@ -30,6 +31,7 @@ const flexAuthMiddleware = async (req, res, next) => {
 
                 if (owner) {
                     req.owner = owner;
+                    req.shop = await Shop.findOne({ ownerId: owner._id });
                     req.user = { id: owner._id, role: "owner" };
                     return next();
                 }

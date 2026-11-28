@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import productService from "../../../services/productService";
+import { useToast } from "../../../context/ToastContext";
 
 const getId = (item) => item?._id || item?.id || "";
 
@@ -19,6 +20,7 @@ const CreateMainProductModal = ({
     onCreated,
     onUpdated,
 }) => {
+    const { success, error: showError } = useToast();
     const isEdit = Boolean(mainProduct);
 
     const [name, setName] = useState("");
@@ -187,20 +189,27 @@ const CreateMainProductModal = ({
 
             if (isEdit) {
                 onUpdated?.(result);
+                success(
+                    image
+                        ? "Main product and image updated successfully."
+                        : "Main product updated successfully."
+                );
             } else {
                 onCreated?.(result);
+                success("Main product created successfully.");
             }
 
             resetForm();
             onClose?.();
 
         } catch (err) {
-            setError(
+            const msg =
                 err?.response?.data?.message ||
                 err?.response?.data?.error ||
                 err?.message ||
-                `Failed to ${isEdit ? "update" : "create"} main product.`
-            );
+                `Failed to ${isEdit ? "update" : "create"} main product.`;
+            setError(msg);
+            showError(msg);
         } finally {
             setLoading(false);
         }

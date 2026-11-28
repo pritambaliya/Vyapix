@@ -19,6 +19,7 @@ import DashboardPage from "../pages/dashboard/DashboardPage";
 import PosBillingPage from "../pages/billing/PosBillingPage";
 import ProductsPage from "../pages/products/ProductsPage";
 import ProductCreatePage from "../pages/products/ProductCreatePage";
+import ArchivedItemsPage from "../pages/products/ArchivedItemsPage";
 
 import InvoiceDetailPage from "../pages/invoices/InvoiceDetailPage";
 import InvoicesPage from "../pages/invoices/InvoicesPage";
@@ -171,6 +172,15 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={["owner"]}>
               <ProductsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/products/archived"
+          element={
+            <ProtectedRoute allowedRoles={["owner"]}>
+              <ArchivedItemsPage />
             </ProtectedRoute>
           }
         />

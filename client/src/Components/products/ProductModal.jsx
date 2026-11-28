@@ -4,34 +4,17 @@ import React, {
   useCallback,
   useRef,
 } from 'react';
-
 import { useNavigate, useParams } from 'react-router-dom';
-
-import {
-  Barcode,
-  Package,
-  Tag,
-  Percent,
-  Layers,
-  Plus,
-  Trash2,
-  CheckCircle2,
-  X,
-  Lock,
-} from 'lucide-react';
+import { Package, X, Loader2 } from 'lucide-react';
 
 import Modal from '../common/Modal';
-import Input from '../common/Input';
-import Select from '../common/Select';
 import Button from '../common/Button';
 import BarcodeScanner from './BarcodeScanner';
+import ProductModalSteps, { WizardProgress } from './ProductModalSteps';
+import ProductModalFields from './ProductModalFields';
 
 import productService from '../../services/productService';
 import { useToast } from '../../context/ToastContext';
-
-import CategoryStep from './product-wizard/CategoryStep';
-import MainProductStep from './product-wizard/MainProductStep';
-import BrandProductStep from './product-wizard/BrandProductStep';
 
 // --------------------------------------------------
 // CONSTANTS
@@ -64,6 +47,12 @@ const INITIAL_VARIANT = {
   isActive: true,
 };
 
+const createEmptyVariant = (defaultGstRate = 0) => ({
+  ...INITIAL_VARIANT,
+  gstRate: Number(defaultGstRate ?? 0),
+  _tempId: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+});
+
 const INITIAL_FORM = {
   categoryId: '',
   mainProductId: '',
@@ -86,27 +75,58 @@ const INITIAL_FORM = {
 
 const getId = (value) => {
   if (!value) return '';
+  if (typeof value === 'string') return value.trim();
 
-  return typeof value === 'object'
-    ? value._id || value.id || ''
-    : value;
+  if (typeof value === 'object') {
+    if (value._id) return getId(value._id);
+    if (value.id) return getId(value.id);
+    if (value.mainProductId) return getId(value.mainProductId);
+    if (value.categoryId) return getId(value.categoryId);
+    if (value.brandProductId) return getId(value.brandProductId);
+    if (typeof value.toString === 'function') {
+      const str = value.toString();
+      if (/^[a-f\d]{24}$/i.test(str)) return str;
+    }
+  }
+
+  return '';
 };
 
-const getList = (response) => {
+const getRefName = (ref) => {
+  if (!ref || typeof ref !== 'object') return '';
+
+  return ref.name || ref.brandName || '';
+};
+
+const getList = (response, keys = []) => {
   if (Array.isArray(response)) return response;
 
-  const list =
-    response?.categories ||
-    response?.mainProducts ||
-    response?.brandProducts ||
-    response?.products ||
-    response?.data?.categories ||
-    response?.data?.mainProducts ||
-    response?.data?.brandProducts ||
-    response?.data?.products ||
-    response?.data;
+  const candidates = [];
 
-  return Array.isArray(list) ? list : [];
+  for (const key of keys) {
+    candidates.push(response?.[key]);
+    candidates.push(response?.data?.[key]);
+    candidates.push(response?.data?.data?.[key]);
+  }
+
+  candidates.push(
+    response?.categories,
+    response?.mainProducts,
+    response?.brandProducts,
+    response?.products,
+    response?.data?.categories,
+    response?.data?.mainProducts,
+    response?.data?.brandProducts,
+    response?.data?.products,
+    response?.data?.data,
+    response?.data
+  );
+
+  for (const item of candidates) {
+    if (Array.isArray(item)) return item;
+  }
+
+  return [];
 };
 
 const getErrorMessage = (error, fallback) =>
@@ -114,36 +134,99 @@ const getErrorMessage = (error, fallback) =>
   error?.message ||
   fallback;
 
-const slugify = (value = '') =>
-  value
+const slugify = (value = '') => {
+  const base = String(value)
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
-const routeSegment = (item) =>
-  `${slugify(item?.name || item?.brandName || 'item')}--${getId(item)}`;
+  return base || 'item';
+};
+
+const OBJECT_ID_RE = /^[a-f\d]{24}$/i;
+
+const computeDeterministicSlugs = (items = []) => {
+  const ordered = [...items].sort((a, b) => {
+    const tA = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tB = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (tA !== tB) return tA - tB;
+    return String(getId(a)).localeCompare(String(getId(b)));
+  });
+
+  const used = new Set();
+  const slugMap = new Map();
+
+  ordered.forEach((item) => {
+    const base = item?.slug || slugify(item?.name || item?.brandName || 'item');
+    let candidate = base;
+    let counter = 2;
+
+    while (used.has(candidate)) {
+      candidate = `${base}-${counter}`;
+      counter += 1;
+    }
+
+    used.add(candidate);
+    slugMap.set(String(getId(item)), candidate);
+  });
+
+  return slugMap;
+};
+
+const routeSegment = (item, siblings = []) => {
+  if (!item) return 'item';
+  if (item.slug) return item.slug;
+
+  if (Array.isArray(siblings) && siblings.length > 0) {
+    const slugMap = computeDeterministicSlugs(siblings);
+    const mapped = slugMap.get(String(getId(item)));
+    if (mapped) return mapped;
+  }
+
+  return slugify(item?.name || item?.brandName || 'item');
+};
 
 const resolveRouteItem = (items, segment) => {
   if (!segment || !Array.isArray(items)) return null;
 
-  const id = segment.split('--').pop();
+  const decodedSegment = decodeURIComponent(segment).trim();
 
-  const byId = items.find(
-    (item) => String(getId(item)) === String(id)
+  // 1. Exact stored slug match
+  const byStoredSlug = items.find(
+    (item) => item?.slug && item.slug === decodedSegment
   );
+  if (byStoredSlug) return byStoredSlug;
 
-  if (byId) return byId;
-
-  return (
-    items.find(
-      (item) =>
-        slugify(item.name || item.brandName) === segment
-    ) || null
+  // 2. Deterministic unique slug match (handles duplicate names without IDs)
+  const slugMap = computeDeterministicSlugs(items);
+  const byComputedSlug = items.find(
+    (item) => slugMap.get(String(getId(item))) === decodedSegment
   );
+  if (byComputedSlug) return byComputedSlug;
+
+  // 3. Base slug match
+  const byBaseSlug = items.find(
+    (item) => slugify(item?.name || item?.brandName) === decodedSegment
+  );
+  if (byBaseSlug) return byBaseSlug;
+
+  // 4. Backward compatibility: legacy `slug--mongoId` or raw `mongoId` URLs
+  const legacyId = decodedSegment.includes('--')
+    ? decodedSegment.split('--').pop()
+    : decodedSegment;
+
+  if (OBJECT_ID_RE.test(legacyId)) {
+    return (
+      items.find(
+        (item) => String(getId(item)) === String(legacyId)
+      ) || null
+    );
+  }
+
+  return null;
 };
 
-// API response can be returned in different shapes.
 const unwrapProduct = (response) => {
   if (!response) return null;
 
@@ -167,6 +250,15 @@ const unwrapProduct = (response) => {
 const isNotFoundError = (error) =>
   error?.response?.status === 404;
 
+const CenteredLoader = ({ message = 'Loading...', minHeight = 'min-h-[260px]' }) => (
+  <div className={`flex ${minHeight} w-full items-center justify-center`}>
+    <div className="flex flex-col items-center justify-center gap-3 text-center">
+      <Loader2 className="h-7 w-7 animate-spin text-orange-500" />
+      <p className="text-sm font-medium text-slate-500">{message}</p>
+    </div>
+  </div>
+);
+
 // --------------------------------------------------
 // PRODUCT MODAL
 // --------------------------------------------------
@@ -187,25 +279,34 @@ export const ProductModal = ({
   } = useParams();
 
   const {
-    success,
     error: showError,
     confirm,
   } = useToast();
 
   const closePage = onClose || (() => navigate('/products'));
 
-  const isMountedRef = useRef(true);
+  // Direct edit mode = opened from ProductsPage with a `product` prop.
+  // Wizard mode = `/product/create` (can still edit an existing product in Step 4).
+  const isDirectEdit = Boolean(product);
+
   const lookupRequestRef = useRef(0);
+  const lookupPromiseRef = useRef(null);
+  const lookupBrandIdRef = useRef('');
+  const mainRequestRef = useRef(0);
+  const brandRequestRef = useRef(0);
+  const lastFetchedMainCategoryRef = useRef('');
+  const lastFetchedBrandMainRef = useRef('');
+  const navLockRef = useRef(false);
 
   // --------------------------------------------------
-  // ACTIVE PRODUCT
+  // ACTIVE & DETECTED PRODUCT
   // --------------------------------------------------
 
-  // This can come either from the parent prop or from
-  // the BrandProduct lookup API.
   const [activeProduct, setActiveProduct] = useState(product);
-
+  const [detectedProduct, setDetectedProduct] = useState(product);
   const isEdit = Boolean(activeProduct);
+  const activeProductRef = useRef(activeProduct);
+  activeProductRef.current = activeProduct;
 
   // --------------------------------------------------
   // FORM STATE
@@ -229,16 +330,29 @@ export const ProductModal = ({
   const [mainProducts, setMainProducts] = useState([]);
   const [brandProducts, setBrandProducts] = useState([]);
 
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [mainProductsLoading, setMainProductsLoading] = useState(false);
+  const [brandProductsLoading, setBrandProductsLoading] = useState(false);
   const [catalogueLoading, setCatalogueLoading] = useState(false);
   const [catalogueError, setCatalogueError] = useState('');
 
   const [productLookupLoading, setProductLookupLoading] = useState(false);
 
+  const [resolvedCatalogue, setResolvedCatalogue] = useState({
+    category: '',
+    mainProduct: '',
+    brandProduct: '',
+  });
+
+  const [wizardCatalogue, setWizardCatalogue] = useState({
+    category: null,
+    mainProduct: null,
+    brandProduct: null,
+  });
+
   // --------------------------------------------------
   // WIZARD STATE
   // --------------------------------------------------
-
-  const [wizardStep, setWizardStep] = useState(1);
 
   const routeStep = brandProductSlug
     ? 4
@@ -248,48 +362,26 @@ export const ProductModal = ({
         ? 2
         : 1;
 
+  const [wizardStep, setWizardStep] = useState(isDirectEdit ? 4 : routeStep);
+
   // --------------------------------------------------
-  // BODY SCROLL LOCK
+  // LOCK BACKGROUND SCROLL
   // --------------------------------------------------
 
   useEffect(() => {
-    isMountedRef.current = true;
-
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isEdit || !isOpen) return;
+    if (isDirectEdit || !isOpen) return;
 
     const previousOverflow = document.body.style.overflow;
-
     document.body.style.overflow = 'hidden';
 
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isEdit, isOpen]);
+  }, [isDirectEdit, isOpen]);
 
   // --------------------------------------------------
   // OPTIONS
   // --------------------------------------------------
-
-  const categoryOptions = categories.map((item) => ({
-    value: getId(item),
-    label: item.name,
-  }));
-
-  const mainProductOptions = mainProducts.map((item) => ({
-    value: getId(item),
-    label: item.name,
-  }));
-
-  const brandProductOptions = brandProducts.map((item) => ({
-    value: getId(item),
-    label: item.name || item.brandName,
-  }));
 
   const unitOptions = UNITS.map((unit) => ({
     value: unit,
@@ -313,32 +405,18 @@ export const ProductModal = ({
           .filter((variant) => variant.isActive !== false)
           .map((variant) => ({
             _id: variant._id,
-
             variantName: variant.variantName || '',
             quantity: String(variant.quantity ?? 1),
             unit: variant.unit || 'pcs',
-
-            purchasePrice: String(
-              variant.purchasePrice ?? ''
-            ),
-
-            sellingPrice: String(
-              variant.sellingPrice ?? ''
-            ),
-
+            purchasePrice: String(variant.purchasePrice ?? ''),
+            sellingPrice: String(variant.sellingPrice ?? ''),
             gstRate: Number(
               variant.gstRate ?? selectedProduct.gstRate ?? 0
             ),
-
             stock: String(variant.stock ?? 0),
-
-            lowStockLimit: String(
-              variant.lowStockLimit ?? 5
-            ),
-
+            lowStockLimit: String(variant.lowStockLimit ?? 5),
             sku: variant.sku || '',
             barcode: variant.barcode || '',
-
             isActive: variant.isActive ?? true,
           }))
       : [];
@@ -347,32 +425,21 @@ export const ProductModal = ({
       categoryId: getId(selectedProduct.categoryId),
       mainProductId: getId(selectedProduct.mainProductId),
       brandProductId: getId(selectedProduct.brandProductId),
-
       sellingType: selectedProduct.sellingType || 'LOOSE',
-
       unit: selectedProduct.unit || 'kg',
-
       purchasePrice:
         selectedProduct.purchasePrice != null
           ? String(selectedProduct.purchasePrice)
           : '',
-
       sellingPrice:
         selectedProduct.sellingPrice != null
           ? String(selectedProduct.sellingPrice)
           : '',
-
       stock: String(selectedProduct.stock ?? 0),
-
-      lowStockLimit: String(
-        selectedProduct.lowStockLimit ?? 5
-      ),
-
+      lowStockLimit: String(selectedProduct.lowStockLimit ?? 5),
       sku: selectedProduct.sku || '',
       barcode: selectedProduct.barcode || '',
-
       gstRate: Number(selectedProduct.gstRate ?? 0),
-
       variants:
         variants.length > 0
           ? variants
@@ -383,13 +450,14 @@ export const ProductModal = ({
   }, []);
 
   // --------------------------------------------------
-  // RESET / INITIAL PRODUCT
+  // RESET / INITIAL PRODUCT (ONLY ON OPEN OR PROP CHANGE)
   // --------------------------------------------------
 
   useEffect(() => {
     if (!isOpen) return;
 
     setActiveProduct(product || null);
+    setDetectedProduct(product || null);
 
     if (product) {
       populateProductForm(product);
@@ -399,8 +467,15 @@ export const ProductModal = ({
         ...INITIAL_FORM,
         variants: [{ ...INITIAL_VARIANT }],
       });
-
-      setWizardStep(routeStep);
+      setWizardCatalogue({
+        category: null,
+        mainProduct: null,
+        brandProduct: null,
+      });
+      lastFetchedMainCategoryRef.current = '';
+      lastFetchedBrandMainRef.current = '';
+      lookupBrandIdRef.current = '';
+      lookupPromiseRef.current = null;
     }
 
     setErrors({});
@@ -408,104 +483,211 @@ export const ProductModal = ({
     setScannerTarget(null);
     setCatalogueError('');
     setProductLookupLoading(false);
-  }, [isOpen, product, populateProductForm, routeStep]);
+  }, [isOpen, product, populateProductForm]);
+
+  // Sync wizardStep with URL routeStep in wizard mode
+  useEffect(() => {
+    if (!isOpen || isDirectEdit) return;
+    setWizardStep(routeStep);
+  }, [isOpen, isDirectEdit, routeStep]);
 
   // --------------------------------------------------
-  // FETCH EXISTING PRODUCT BY BRAND PRODUCT
+  // FETCH HELPERS (MAIN & BRAND PRODUCTS)
   // --------------------------------------------------
 
-  const lookupExistingProduct = useCallback(
-    async (brandProductId) => {
-      if (!brandProductId) return null;
+  const fetchMainProductsForCategory = useCallback(async (categoryId) => {
+    const resolvedCatId = getId(categoryId);
+    if (!resolvedCatId) {
+      setMainProducts([]);
+      lastFetchedMainCategoryRef.current = '';
+      return [];
+    }
+
+    const reqId = ++mainRequestRef.current;
+    lastFetchedMainCategoryRef.current = String(resolvedCatId);
+    setMainProductsLoading(true);
+    setCatalogueError('');
+
+    try {
+      const response = await productService.getMainProducts({
+        categoryId: resolvedCatId,
+      });
+
+      if (reqId !== mainRequestRef.current) return [];
+
+      const list = getList(response, ['mainProducts']);
+      setMainProducts(list);
+      return list;
+    } catch (err) {
+      if (reqId !== mainRequestRef.current) return [];
+
+      setMainProducts([]);
+      setCatalogueError(
+        getErrorMessage(err, 'Failed to load main products.')
+      );
+      return [];
+    } finally {
+      if (reqId === mainRequestRef.current) {
+        setMainProductsLoading(false);
+      }
+    }
+  }, []);
+
+  const fetchBrandProductsForMain = useCallback(async (mainProductId) => {
+    const resolvedMainId = getId(mainProductId);
+    if (!resolvedMainId) {
+      setBrandProducts([]);
+      lastFetchedBrandMainRef.current = '';
+      return [];
+    }
+
+    const reqId = ++brandRequestRef.current;
+    lastFetchedBrandMainRef.current = String(resolvedMainId);
+    setBrandProductsLoading(true);
+    setCatalogueError('');
+
+    try {
+      const response = await productService.getBrandProducts({
+        mainProductId: resolvedMainId,
+      });
+
+      if (reqId !== brandRequestRef.current) return [];
+
+      const list = getList(response, ['brandProducts']);
+      setBrandProducts(list);
+      return list;
+    } catch (err) {
+      if (reqId !== brandRequestRef.current) return [];
+
+      setBrandProducts([]);
+      setCatalogueError(
+        getErrorMessage(err, 'Failed to load brand products.')
+      );
+      return [];
+    } finally {
+      if (reqId === brandRequestRef.current) {
+        setBrandProductsLoading(false);
+      }
+    }
+  }, []);
+
+  // --------------------------------------------------
+  // CHECK EXISTING PRODUCT BY BRAND PRODUCT
+  // --------------------------------------------------
+
+  const checkExistingProduct = useCallback(
+    async (brandProductId, { openDetails = false } = {}) => {
+      const resolvedBrandId = getId(brandProductId);
+      if (!resolvedBrandId) return null;
+
+      // Reuse in-flight request for the same Brand Product to avoid duplicate API calls
+      if (
+        lookupBrandIdRef.current === resolvedBrandId &&
+        lookupPromiseRef.current
+      ) {
+        const existing = await lookupPromiseRef.current;
+        if (openDetails) {
+          if (existing) {
+            const currentActiveId = getId(activeProductRef.current);
+            setActiveProduct(existing);
+            if (currentActiveId !== getId(existing)) {
+              populateProductForm(existing);
+            }
+          } else {
+            setActiveProduct(null);
+          }
+        }
+        return existing;
+      }
 
       const requestId = ++lookupRequestRef.current;
-
+      lookupBrandIdRef.current = resolvedBrandId;
       setProductLookupLoading(true);
       setCatalogueError('');
 
-      try {
-        const response =
-          await productService.getProductByBrandProduct(
-            brandProductId
+      const runLookup = async () => {
+        try {
+          const response =
+            await productService.getProductByBrandProduct(resolvedBrandId);
+
+          if (requestId !== lookupRequestRef.current) {
+            return null;
+          }
+
+          if (response?.exists === false || response?.data?.exists === false) {
+            setDetectedProduct(null);
+            if (openDetails) setActiveProduct(null);
+            return null;
+          }
+
+          const existingProduct = unwrapProduct(response);
+          setDetectedProduct(existingProduct || null);
+
+          if (openDetails) {
+            if (existingProduct) {
+              setActiveProduct(existingProduct);
+              populateProductForm(existingProduct);
+            } else {
+              setActiveProduct(null);
+            }
+          }
+
+          return existingProduct || null;
+        } catch (err) {
+          if (requestId !== lookupRequestRef.current) {
+            return null;
+          }
+
+          if (isNotFoundError(err)) {
+            setDetectedProduct(null);
+            if (openDetails) setActiveProduct(null);
+            return null;
+          }
+
+          const message = getErrorMessage(
+            err,
+            'Unable to check existing product.'
           );
 
-        if (requestId !== lookupRequestRef.current) {
-          return null;
+          setCatalogueError(message);
+          showError(message);
+
+          throw err;
+        } finally {
+          if (requestId === lookupRequestRef.current) {
+            setProductLookupLoading(false);
+            lookupPromiseRef.current = null;
+          }
         }
+      };
 
-        // exists: false is a valid "no product yet" response — don't throw
-        if (response?.exists === false || response?.data?.exists === false) {
-          setActiveProduct(null);
-          return null;
-        }
-
-        const existingProduct = unwrapProduct(response);
-
-        if (!existingProduct) {
-          setActiveProduct(null);
-          return null;
-        }
-
-        setActiveProduct(existingProduct);
-
-        populateProductForm(existingProduct);
-
-        setWizardStep(4);
-
-        return existingProduct;
-      } catch (err) {
-        if (requestId !== lookupRequestRef.current) {
-          return null;
-        }
-
-        if (isNotFoundError(err)) {
-          setActiveProduct(null);
-
-          return null;
-        }
-
-        const message = getErrorMessage(
-          err,
-          'Unable to check existing product.'
-        );
-
-        setCatalogueError(message);
-        showError(message);
-
-        throw err;
-      } finally {
-        if (requestId === lookupRequestRef.current) {
-          setProductLookupLoading(false);
-        }
-      }
+      const promise = runLookup();
+      lookupPromiseRef.current = promise;
+      return promise;
     },
     [populateProductForm, showError]
   );
 
   // --------------------------------------------------
-  // FETCH CATEGORIES FOR EDIT MODE
+  // DIRECT EDIT MODE CATALOGUE FETCHING
   // --------------------------------------------------
 
   useEffect(() => {
-    if (!isOpen || !isEdit) return;
+    if (!isOpen || !isDirectEdit) return;
 
     let cancelled = false;
 
     const fetchCategories = async () => {
       try {
         const response = await productService.getCategories();
-
         if (!cancelled) {
-          setCategories(getList(response));
+          setCategories(getList(response, ['categories']));
         }
       } catch (err) {
         if (!cancelled) {
-          const message = getErrorMessage(
-            err,
-            'Failed to load categories.'
+          setCatalogueError(
+            getErrorMessage(err, 'Failed to load categories.')
           );
-
-          setCatalogueError(message);
         }
       }
     };
@@ -515,225 +697,155 @@ export const ProductModal = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, isEdit]);
-
-  // --------------------------------------------------
-  // FETCH MAIN PRODUCTS FOR EDIT MODE
-  // --------------------------------------------------
+  }, [isOpen, isDirectEdit]);
 
   useEffect(() => {
-    if (!isOpen || !isEdit || !formData.categoryId) {
+    if (!isOpen || !isDirectEdit) return;
+
+    if (!formData.categoryId) {
       setMainProducts([]);
       return;
     }
 
-    let cancelled = false;
-
-    const fetchMainProducts = async () => {
-      try {
-        const response = await productService.getMainProducts({
-          categoryId: formData.categoryId,
-        });
-
-        if (!cancelled) {
-          setMainProducts(getList(response));
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setCatalogueError(
-            getErrorMessage(
-              err,
-              'Failed to load main products.'
-            )
-          );
-        }
-      }
-    };
-
-    fetchMainProducts();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, isEdit, formData.categoryId]);
-
-  // --------------------------------------------------
-  // FETCH BRAND PRODUCTS FOR EDIT MODE
-  // --------------------------------------------------
+    fetchMainProductsForCategory(formData.categoryId);
+  }, [isOpen, isDirectEdit, formData.categoryId, fetchMainProductsForCategory]);
 
   useEffect(() => {
-    if (!isOpen || !isEdit || !formData.mainProductId) {
+    if (!isOpen || !isDirectEdit) return;
+
+    if (!formData.mainProductId) {
       setBrandProducts([]);
       return;
     }
 
-    let cancelled = false;
-
-    const fetchBrandProducts = async () => {
-      try {
-        const response = await productService.getBrandProducts({
-          mainProductId: formData.mainProductId,
-        });
-
-        if (!cancelled) {
-          setBrandProducts(getList(response));
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setCatalogueError(
-            getErrorMessage(
-              err,
-              'Failed to load brand products.'
-            )
-          );
-        }
-      }
-    };
-
-    fetchBrandProducts();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, isEdit, formData.mainProductId]);
+    fetchBrandProductsForMain(formData.mainProductId);
+  }, [isOpen, isDirectEdit, formData.mainProductId, fetchBrandProductsForMain]);
 
   // --------------------------------------------------
-  // RESTORE CREATE FLOW FROM URL
+  // RESTORE WIZARD FLOW FROM URL (PRESERVING BACK SELECTIONS)
   // --------------------------------------------------
 
   useEffect(() => {
-    if (!isOpen || product || activeProduct) return;
+    if (!isOpen || isDirectEdit) return;
 
     let cancelled = false;
 
     const restoreFromRoute = async () => {
-      setCatalogueLoading(true);
       setCatalogueError('');
-      setWizardStep(routeStep);
 
       try {
-        const categoryResponse =
-          await productService.getCategories();
+        // 1. Load categories once
+        let categoryList = categories;
+        if (categoryList.length === 0) {
+          setCategoriesLoading(true);
+          if (categorySlug) setCatalogueLoading(true);
 
-        const categoryList = getList(categoryResponse);
+          const categoryResponse = await productService.getCategories();
+          categoryList = getList(categoryResponse, ['categories']);
 
-        if (cancelled) return;
-
-        setCategories(categoryList);
+          if (cancelled) return;
+          setCategories(categoryList);
+          setCategoriesLoading(false);
+        }
 
         if (!categorySlug) {
-          setMainProducts([]);
-          setBrandProducts([]);
-
-          setFormData((prev) => ({
-            ...prev,
-            categoryId: '',
-            mainProductId: '',
-            brandProductId: '',
-          }));
-
+          setCatalogueLoading(false);
           return;
         }
 
-        const category = resolveRouteItem(
-          categoryList,
-          categorySlug
-        );
+        const category = resolveRouteItem(categoryList, categorySlug);
 
         if (!category) {
-          navigate('/product/create', {
-            replace: true,
-          });
-
+          setCatalogueLoading(false);
+          navigate('/product/create', { replace: true });
           return;
         }
 
-        const mainResponse =
-          await productService.getMainProducts({
-            categoryId: getId(category),
-          });
+        const catId = getId(category);
 
-        const mainList = getList(mainResponse);
+        // 2. Load main products for selected category if not already fetched
+        let mainList = mainProducts;
+        if (lastFetchedMainCategoryRef.current !== String(catId)) {
+          mainList = await fetchMainProductsForCategory(catId);
+          if (cancelled) return;
+        }
 
-        if (cancelled) return;
-
-        setMainProducts(mainList);
-
-        const mainProduct = resolveRouteItem(
-          mainList,
-          mainProductSlug
-        );
+        const mainProduct = mainProductSlug
+          ? resolveRouteItem(mainList, mainProductSlug)
+          : null;
 
         if (mainProductSlug && !mainProduct) {
-          navigate(
-            `/product/create/${categorySlug}`,
-            { replace: true }
-          );
-
+          setCatalogueLoading(false);
+          navigate(`/product/create/${categorySlug}`, { replace: true });
           return;
         }
 
-        let brandList = [];
+        // 3. Load brand products if mainProductSlug is in the URL
+        let brandList = brandProducts;
         let brandProduct = null;
 
         if (mainProduct) {
-          const brandResponse =
-            await productService.getBrandProducts({
-              mainProductId: getId(mainProduct),
-            });
+          const mainId = getId(mainProduct);
+          if (lastFetchedBrandMainRef.current !== String(mainId)) {
+            brandList = await fetchBrandProductsForMain(mainId);
+            if (cancelled) return;
+          }
 
-          brandList = getList(brandResponse);
-
-          if (cancelled) return;
-
-          setBrandProducts(brandList);
-
-          brandProduct = resolveRouteItem(
-            brandList,
-            brandProductSlug
-          );
+          brandProduct = brandProductSlug
+            ? resolveRouteItem(brandList, brandProductSlug)
+            : null;
 
           if (brandProductSlug && !brandProduct) {
+            setCatalogueLoading(false);
             navigate(
               `/product/create/${categorySlug}/${mainProductSlug}`,
               { replace: true }
             );
-
             return;
           }
-        } else {
-          setBrandProducts([]);
         }
 
         if (cancelled) return;
 
-        setFormData((prev) => ({
-          ...prev,
-          categoryId: getId(category),
-          mainProductId: getId(mainProduct),
-          brandProductId: getId(brandProduct),
+        // Preserve previously selected deeper IDs when navigating Back to a shorter URL!
+        const resolvedMainId = getId(mainProduct);
+        const resolvedBrandId = getId(brandProduct);
+
+        setWizardCatalogue((prev) => ({
+          category: category || prev.category,
+          mainProduct: mainProduct || prev.mainProduct,
+          brandProduct: brandProduct || prev.brandProduct,
         }));
 
-        // If URL already contains a BrandProduct,
-        // check whether a Product exists for this shop.
-        if (brandProduct) {
+        setFormData((prev) => ({
+          ...prev,
+          categoryId: catId || prev.categoryId,
+          mainProductId: resolvedMainId || prev.mainProductId,
+          brandProductId: resolvedBrandId || prev.brandProductId,
+        }));
+
+        // If URL directly loads Step 4 with a brandProductSlug, load its existing product
+        // only if we haven't already loaded it for this brandProductId (prevents wiping user edits).
+        const alreadyLoadedForBrand =
+          String(getId(activeProductRef.current?.brandProductId)) === String(resolvedBrandId) ||
+          (lookupBrandIdRef.current === String(resolvedBrandId) && !lookupPromiseRef.current);
+
+        if (brandProduct && brandProductSlug && !alreadyLoadedForBrand) {
           try {
-            await lookupExistingProduct(getId(brandProduct));
+            await checkExistingProduct(resolvedBrandId, { openDetails: true });
           } catch {
-            // The lookup function already displays the error.
+            // Error already shown by checkExistingProduct
           }
         }
       } catch (err) {
         if (!cancelled) {
           setCatalogueError(
-            getErrorMessage(
-              err,
-              'Unable to restore product selection.'
-            )
+            getErrorMessage(err, 'Unable to restore product selection.')
           );
         }
       } finally {
         if (!cancelled) {
+          setCategoriesLoading(false);
           setCatalogueLoading(false);
         }
       }
@@ -744,95 +856,379 @@ export const ProductModal = ({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isOpen,
-    product,
-    activeProduct,
+    isDirectEdit,
     categorySlug,
     mainProductSlug,
     brandProductSlug,
-    routeStep,
     navigate,
-    lookupExistingProduct,
+    fetchMainProductsForCategory,
+    fetchBrandProductsForMain,
+    checkExistingProduct,
   ]);
 
   // --------------------------------------------------
-  // WIZARD SELECTION HANDLERS
+  // WIZARD ROUTE NAVIGATION
   // --------------------------------------------------
 
-  const handleWizardCategorySelect = (category) => {
-    const categoryId = getId(category);
+  const getCreateRoute = useCallback(
+    (step) => {
+      const category =
+        categories.find(
+          (item) => String(getId(item)) === String(formData.categoryId)
+        ) || wizardCatalogue.category;
 
-    if (!categoryId) return;
+      const mainProduct =
+        mainProducts.find(
+          (item) => String(getId(item)) === String(formData.mainProductId)
+        ) || wizardCatalogue.mainProduct;
 
-    setActiveProduct(null);
+      const brandProduct =
+        brandProducts.find(
+          (item) => String(getId(item)) === String(formData.brandProductId)
+        ) || wizardCatalogue.brandProduct;
 
-    setFormData((prev) => ({
-      ...prev,
-      categoryId,
-      mainProductId: '',
-      brandProductId: '',
-    }));
+      if (step <= 1 || !category) {
+        return '/product/create';
+      }
 
-    setMainProducts([]);
-    setBrandProducts([]);
+      const categoryPath = routeSegment(category, categories);
 
-    setErrors({});
-  };
+      if (step === 2 || !mainProduct) {
+        return `/product/create/${categoryPath}`;
+      }
 
-  const handleWizardMainProductSelect = (mainProduct) => {
-    const mainProductId = getId(mainProduct);
+      const mainProductPath = routeSegment(mainProduct, mainProducts);
 
-    if (!mainProductId) return;
+      if (step === 3 || !brandProduct) {
+        return `/product/create/${categoryPath}/${mainProductPath}`;
+      }
 
-    setActiveProduct(null);
+      const brandProductPath = routeSegment(brandProduct, brandProducts);
 
-    setFormData((prev) => ({
-      ...prev,
-      mainProductId,
-      brandProductId: '',
-    }));
+      return `/product/create/${categoryPath}/${mainProductPath}/${brandProductPath}`;
+    },
+    [
+      categories,
+      mainProducts,
+      brandProducts,
+      formData.categoryId,
+      formData.mainProductId,
+      formData.brandProductId,
+      wizardCatalogue,
+    ]
+  );
 
-    setBrandProducts([]);
+  const goToWizardStep = useCallback(
+    (step, overrideItems = {}) => {
+      if (step < 1 || step > 4 || isDirectEdit) return;
 
-    setErrors({});
-  };
+      const cat =
+        overrideItems.category ||
+        categories.find(
+          (item) => String(getId(item)) === String(formData.categoryId)
+        ) ||
+        wizardCatalogue.category;
 
-  const handleWizardBrandProductSelect = async (brandProduct) => {
-    const brandProductId = getId(brandProduct);
+      const main =
+        overrideItems.mainProduct ||
+        mainProducts.find(
+          (item) => String(getId(item)) === String(formData.mainProductId)
+        ) ||
+        wizardCatalogue.mainProduct;
 
-    if (!brandProductId) return;
+      const brand =
+        overrideItems.brandProduct ||
+        brandProducts.find(
+          (item) => String(getId(item)) === String(formData.brandProductId)
+        ) ||
+        wizardCatalogue.brandProduct;
 
-    setFormData((prev) => ({
-      ...prev,
-      brandProductId,
-    }));
+      let targetRoute = '/product/create';
+      if (step >= 2 && cat) {
+        const catPath = routeSegment(cat, categories);
+        targetRoute = `/product/create/${catPath}`;
 
-    setErrors({});
+        if (step >= 3 && main) {
+          const mainPath = routeSegment(main, mainProducts);
+          targetRoute = `/product/create/${catPath}/${mainPath}`;
 
-    try {
-      const existingProduct =
-        await lookupExistingProduct(brandProductId);
+          if (step >= 4 && brand) {
+            const brandPath = routeSegment(brand, brandProducts);
+            targetRoute = `/product/create/${catPath}/${mainPath}/${brandPath}`;
+          }
+        }
+      }
 
-      if (!existingProduct) {
-        setWizardStep(4);
+      setWizardStep(step);
+      navigate(targetRoute);
+    },
+    [
+      isDirectEdit,
+      categories,
+      mainProducts,
+      brandProducts,
+      formData.categoryId,
+      formData.mainProductId,
+      formData.brandProductId,
+      wizardCatalogue,
+      navigate,
+    ]
+  );
 
+  // --------------------------------------------------
+  // WIZARD SELECTION HANDLERS (SINGLE + DOUBLE CLICK)
+  // --------------------------------------------------
+
+  const handleWizardCategorySelect = useCallback(
+    (category) => {
+      const categoryId = getId(category);
+      if (!categoryId) return;
+
+      const isSameCategory =
+        String(formData.categoryId) === String(categoryId);
+
+      setWizardCatalogue((prev) =>
+        isSameCategory
+          ? { ...prev, category: category || prev.category }
+          : {
+              category: category || null,
+              mainProduct: null,
+              brandProduct: null,
+            }
+      );
+
+      if (isSameCategory) {
+        // Still ensure mainProducts are fetched if not loaded yet
+        if (lastFetchedMainCategoryRef.current !== String(categoryId)) {
+          fetchMainProductsForCategory(categoryId);
+        }
+        return;
+      }
+
+      setActiveProduct(null);
+      setDetectedProduct(null);
+      lookupBrandIdRef.current = '';
+      lookupPromiseRef.current = null;
+
+      setFormData((prev) => ({
+        ...prev,
+        categoryId,
+        mainProductId: '',
+        brandProductId: '',
+      }));
+
+      setMainProducts([]);
+      setBrandProducts([]);
+      lastFetchedBrandMainRef.current = '';
+      setErrors({});
+
+      fetchMainProductsForCategory(categoryId);
+    },
+    [formData.categoryId, fetchMainProductsForCategory]
+  );
+
+  const handleWizardCategoryDoubleClick = useCallback(
+    (category) => {
+      const categoryId = getId(category);
+      if (!categoryId || navLockRef.current) return;
+
+      navLockRef.current = true;
+      setTimeout(() => {
+        navLockRef.current = false;
+      }, 300);
+
+      handleWizardCategorySelect(category);
+      goToWizardStep(2, { category });
+    },
+    [handleWizardCategorySelect, goToWizardStep]
+  );
+
+  const handleWizardMainProductSelect = useCallback(
+    (mainProduct) => {
+      const mainProductId = getId(mainProduct);
+      if (!mainProductId) return;
+
+      const isSameMain =
+        String(formData.mainProductId) === String(mainProductId);
+
+      setWizardCatalogue((prev) =>
+        isSameMain
+          ? { ...prev, mainProduct: mainProduct || prev.mainProduct }
+          : {
+              ...prev,
+              mainProduct: mainProduct || null,
+              brandProduct: null,
+            }
+      );
+
+      if (isSameMain) {
+        if (lastFetchedBrandMainRef.current !== String(mainProductId)) {
+          fetchBrandProductsForMain(mainProductId);
+        }
+        return;
+      }
+
+      setActiveProduct(null);
+      setDetectedProduct(null);
+      lookupBrandIdRef.current = '';
+      lookupPromiseRef.current = null;
+
+      setFormData((prev) => ({
+        ...prev,
+        mainProductId,
+        brandProductId: '',
+      }));
+
+      setBrandProducts([]);
+      setErrors({});
+
+      fetchBrandProductsForMain(mainProductId);
+    },
+    [formData.mainProductId, fetchBrandProductsForMain]
+  );
+
+  const handleWizardMainProductDoubleClick = useCallback(
+    (mainProduct) => {
+      const mainProductId = getId(mainProduct);
+      if (!mainProductId || navLockRef.current) return;
+
+      navLockRef.current = true;
+      setTimeout(() => {
+        navLockRef.current = false;
+      }, 300);
+
+      handleWizardMainProductSelect(mainProduct);
+      goToWizardStep(3, { mainProduct });
+    },
+    [handleWizardMainProductSelect, goToWizardStep]
+  );
+
+  // Single-click Brand Product: highlight + detect existing product WITHOUT opening Step 4
+  const handleWizardBrandProductSelect = useCallback(
+    async (brandProduct) => {
+      const brandProductId = getId(brandProduct);
+      if (!brandProductId) return;
+
+      const isSameBrand =
+        String(formData.brandProductId) === String(brandProductId);
+
+      setWizardCatalogue((prev) => ({
+        ...prev,
+        brandProduct: brandProduct || prev.brandProduct,
+      }));
+
+      if (!isSameBrand) {
         setActiveProduct(null);
-
+        setDetectedProduct(null);
         setFormData((prev) => ({
           ...prev,
           brandProductId,
-          sellingType: 'LOOSE',
-          variants: [{ ...INITIAL_VARIANT }],
         }));
+        setErrors({});
       }
-    } catch {
-      // Error already shown by lookupExistingProduct.
-    }
-  };
+
+      // Check existing product silently in Step 3 unless already checked for this brandProductId
+      if (!isSameBrand || lookupBrandIdRef.current !== String(brandProductId)) {
+        try {
+          await checkExistingProduct(brandProductId, { openDetails: false });
+        } catch {
+          // Error already shown by checkExistingProduct
+        }
+      }
+    },
+    [formData.brandProductId, checkExistingProduct]
+  );
+
+  // Open Step 4 (Product Details) for currently selected or double-clicked Brand Product
+  const openProductDetails = useCallback(
+    async (brandProductOverride = null) => {
+      const targetBrandId =
+        getId(brandProductOverride) || formData.brandProductId;
+
+      if (!targetBrandId || navLockRef.current) return;
+
+      navLockRef.current = true;
+      setTimeout(() => {
+        navLockRef.current = false;
+      }, 300);
+
+      try {
+        const existingProduct = await checkExistingProduct(targetBrandId, {
+          openDetails: false,
+        });
+
+        if (existingProduct) {
+          // Only re-populate if we haven't already loaded this exact product into activeProduct
+          if (getId(activeProduct) !== getId(existingProduct)) {
+            setActiveProduct(existingProduct);
+            populateProductForm(existingProduct);
+          } else if (!activeProduct) {
+            setActiveProduct(existingProduct);
+            populateProductForm(existingProduct);
+          }
+        } else {
+          // If switching from an earlier existing product to a new product, reset detail fields
+          if (activeProduct) {
+            setActiveProduct(null);
+            setFormData((prev) => ({
+              ...INITIAL_FORM,
+              categoryId: prev.categoryId,
+              mainProductId: prev.mainProductId,
+              brandProductId: targetBrandId,
+              variants: [{ ...INITIAL_VARIANT }],
+            }));
+          } else {
+            setActiveProduct(null);
+          }
+        }
+
+        goToWizardStep(
+          4,
+          brandProductOverride ? { brandProduct: brandProductOverride } : {}
+        );
+      } catch {
+        // Error already shown by checkExistingProduct
+      }
+    },
+    [
+      formData.brandProductId,
+      activeProduct,
+      checkExistingProduct,
+      populateProductForm,
+      goToWizardStep,
+    ]
+  );
+
+  const handleWizardBrandProductDoubleClick = useCallback(
+    async (brandProduct) => {
+      const brandProductId = getId(brandProduct);
+      if (!brandProductId) return;
+
+      setWizardCatalogue((prev) => ({
+        ...prev,
+        brandProduct: brandProduct || prev.brandProduct,
+      }));
+
+      if (String(formData.brandProductId) !== String(brandProductId)) {
+        setActiveProduct(null);
+        setDetectedProduct(null);
+        setFormData((prev) => ({
+          ...prev,
+          brandProductId,
+        }));
+        setErrors({});
+      }
+
+      await openProductDetails(brandProduct);
+    },
+    [formData.brandProductId, openProductDetails]
+  );
 
   // --------------------------------------------------
-  // CREATE CATEGORY CALLBACK
+  // CATALOGUE CRUD CALLBACKS
   // --------------------------------------------------
 
   const handleCategoryCreated = (category) => {
@@ -842,20 +1238,14 @@ export const ProductModal = ({
       const exists = prev.some(
         (item) => getId(item) === getId(category)
       );
-
       return exists ? prev : [...prev, category];
     });
 
     handleWizardCategorySelect(category);
   };
 
-  // --------------------------------------------------
-  // UPDATE CATEGORY CALLBACK
-  // --------------------------------------------------
-
   const handleCategoryUpdated = useCallback((updatedCategory) => {
     const categoryId = getId(updatedCategory);
-
     if (!categoryId) return;
 
     setCategories((prev) =>
@@ -867,24 +1257,19 @@ export const ProductModal = ({
     );
   }, []);
 
-  // --------------------------------------------------
-  // DELETE CATEGORY CALLBACK
-  // --------------------------------------------------
-
   const handleCategoryDeleted = useCallback(
     (categoryId) => {
       if (!categoryId) return;
-
       const deletedId = String(categoryId);
 
       setCategories((prev) =>
-        prev.filter(
-          (category) => String(getId(category)) !== deletedId
-        )
+        prev.filter((category) => String(getId(category)) !== deletedId)
       );
 
       if (String(formData.categoryId) !== deletedId) return;
 
+      setActiveProduct(null);
+      setDetectedProduct(null);
       setFormData((prev) => ({
         ...prev,
         categoryId: '',
@@ -894,21 +1279,16 @@ export const ProductModal = ({
 
       setMainProducts([]);
       setBrandProducts([]);
-
+      lastFetchedMainCategoryRef.current = '';
+      lastFetchedBrandMainRef.current = '';
+      lookupBrandIdRef.current = '';
       setErrors({});
-
       setWizardStep(1);
 
-      navigate('/product/create', {
-        replace: true,
-      });
+      navigate('/product/create', { replace: true });
     },
     [formData.categoryId, navigate]
   );
-
-  // --------------------------------------------------
-  // CREATE MAIN PRODUCT CALLBACK
-  // --------------------------------------------------
 
   const handleMainProductCreated = (mainProduct) => {
     if (!mainProduct) return;
@@ -917,20 +1297,14 @@ export const ProductModal = ({
       const exists = prev.some(
         (item) => getId(item) === getId(mainProduct)
       );
-
       return exists ? prev : [...prev, mainProduct];
     });
 
     handleWizardMainProductSelect(mainProduct);
   };
 
-  // --------------------------------------------------
-  // UPDATE MAIN PRODUCT CALLBACK
-  // --------------------------------------------------
-
   const handleMainProductUpdated = useCallback((updatedProduct) => {
     const productId = getId(updatedProduct);
-
     if (!productId) return;
 
     setMainProducts((prev) =>
@@ -942,14 +1316,9 @@ export const ProductModal = ({
     );
   }, []);
 
-  // --------------------------------------------------
-  // DELETE MAIN PRODUCT CALLBACK
-  // --------------------------------------------------
-
   const handleMainProductDeleted = useCallback(
     (productId) => {
       if (!productId) return;
-
       const deletedId = String(productId);
 
       setMainProducts((prev) =>
@@ -958,6 +1327,8 @@ export const ProductModal = ({
 
       if (String(formData.mainProductId) !== deletedId) return;
 
+      setActiveProduct(null);
+      setDetectedProduct(null);
       setFormData((prev) => ({
         ...prev,
         mainProductId: '',
@@ -965,8 +1336,9 @@ export const ProductModal = ({
       }));
 
       setBrandProducts([]);
+      lastFetchedBrandMainRef.current = '';
+      lookupBrandIdRef.current = '';
       setErrors({});
-
       setWizardStep(2);
 
       const category = categories.find(
@@ -975,17 +1347,13 @@ export const ProductModal = ({
 
       navigate(
         category
-          ? `/product/create/${routeSegment(category)}`
+          ? `/product/create/${routeSegment(category, categories)}`
           : '/product/create',
         { replace: true }
       );
     },
     [categories, formData.categoryId, formData.mainProductId, navigate]
   );
-
-  // --------------------------------------------------
-  // CREATE BRAND PRODUCT CALLBACK
-  // --------------------------------------------------
 
   const handleBrandProductCreated = (brandProduct) => {
     if (!brandProduct) return;
@@ -994,16 +1362,11 @@ export const ProductModal = ({
       const exists = prev.some(
         (item) => getId(item) === getId(brandProduct)
       );
-
       return exists ? prev : [...prev, brandProduct];
     });
 
     handleWizardBrandProductSelect(brandProduct);
   };
-
-  // --------------------------------------------------
-  // UPDATE BRAND PRODUCT CALLBACK
-  // --------------------------------------------------
 
   const handleBrandProductUpdated = (updatedProduct) => {
     const productId = getId(updatedProduct);
@@ -1021,14 +1384,9 @@ export const ProductModal = ({
     );
   };
 
-  // --------------------------------------------------
-  // DELETE BRAND PRODUCT CALLBACK
-  // --------------------------------------------------
-
   const handleBrandProductDeleted = useCallback(
     (productId) => {
       if (!productId) return;
-
       const deletedId = String(productId);
 
       setBrandProducts((prev) =>
@@ -1037,6 +1395,9 @@ export const ProductModal = ({
 
       if (String(formData.brandProductId) !== deletedId) return;
 
+      setActiveProduct(null);
+      setDetectedProduct(null);
+      lookupBrandIdRef.current = '';
       setFormData((prev) => ({
         ...prev,
         brandProductId: '',
@@ -1048,16 +1409,15 @@ export const ProductModal = ({
       const category = categories.find(
         (item) => String(getId(item)) === String(formData.categoryId)
       );
-
       const mainProduct = mainProducts.find(
         (item) => String(getId(item)) === String(formData.mainProductId)
       );
 
       navigate(
         category && mainProduct
-          ? `/product/create/${routeSegment(category)}/${routeSegment(mainProduct)}`
+          ? `/product/create/${routeSegment(category, categories)}/${routeSegment(mainProduct, mainProducts)}`
           : category
-            ? `/product/create/${routeSegment(category)}`
+            ? `/product/create/${routeSegment(category, categories)}`
             : '/product/create',
         { replace: true }
       );
@@ -1073,7 +1433,7 @@ export const ProductModal = ({
   );
 
   // --------------------------------------------------
-  // GENERAL FORM CHANGE
+  // FORM & VARIANT HANDLERS
   // --------------------------------------------------
 
   const handleChange = (event) => {
@@ -1089,10 +1449,6 @@ export const ProductModal = ({
       [name]: '',
     }));
   };
-
-  // --------------------------------------------------
-  // VARIANT MANAGEMENT
-  // --------------------------------------------------
 
   const handleVariantChange = (index, field, value) => {
     setFormData((prev) => {
@@ -1118,16 +1474,9 @@ export const ProductModal = ({
   const addVariant = () => {
     setFormData((prev) => ({
       ...prev,
-      variants: [
-        ...prev.variants,
-        { ...INITIAL_VARIANT },
-      ],
+      variants: [...prev.variants, createEmptyVariant(prev.gstRate)],
     }));
   };
-
-  // --------------------------------------------------
-  // REMOVE VARIANT WITH CONFIRMATION
-  // --------------------------------------------------
 
   const removeVariant = async (index) => {
     const variant = formData.variants[index];
@@ -1137,14 +1486,12 @@ export const ProductModal = ({
       return;
     }
 
-    // Existing variants require confirmation because
-    // the backend will deactivate them.
     if (variant._id) {
       const confirmed = await confirm({
         title: 'Remove Variant?',
         message:
           `Are you sure you want to remove "${variant.variantName}"? ` +
-          'This variant will be deactivated and will no longer be available for sale.',
+          'This variant will be deactivated when you save changes and will no longer be available for sale.',
         confirmText: 'Remove Variant',
         cancelText: 'Keep Variant',
         variant: 'danger',
@@ -1155,16 +1502,14 @@ export const ProductModal = ({
 
     setFormData((prev) => ({
       ...prev,
-      variants: prev.variants.filter(
-        (_, i) => i !== index
-      ),
+      variants: prev.variants.filter((_, i) => i !== index),
     }));
 
     setErrors({});
   };
 
   // --------------------------------------------------
-  // VALIDATION
+  // VALIDATION & PAYLOAD
   // --------------------------------------------------
 
   const isValidNumber = (value, minimum = 0) =>
@@ -1177,16 +1522,13 @@ export const ProductModal = ({
   const validate = () => {
     const nextErrors = {};
 
-    // Category validation is only required during creation.
     if (!isEdit) {
       if (!formData.categoryId) {
         nextErrors.categoryId = 'Please select a category';
       }
-
       if (!formData.mainProductId) {
         nextErrors.mainProductId = 'Please select a main product';
       }
-
       if (!formData.brandProductId) {
         nextErrors.brandProductId = 'Please select a brand product';
       }
@@ -1196,24 +1538,17 @@ export const ProductModal = ({
       if (!formData.unit) {
         nextErrors.unit = 'Please select a unit';
       }
-
       if (!isValidNumber(formData.purchasePrice)) {
-        nextErrors.purchasePrice =
-          'Enter a valid purchase price';
+        nextErrors.purchasePrice = 'Enter a valid purchase price';
       }
-
       if (!isValidNumber(formData.sellingPrice)) {
-        nextErrors.sellingPrice =
-          'Enter a valid selling price';
+        nextErrors.sellingPrice = 'Enter a valid selling price';
       }
-
       if (!isEdit && !isValidNumber(formData.stock)) {
         nextErrors.stock = 'Enter a valid initial stock';
       }
-
       if (!isValidNumber(formData.lowStockLimit)) {
-        nextErrors.lowStockLimit =
-          'Enter a valid low stock limit';
+        nextErrors.lowStockLimit = 'Enter a valid low stock limit';
       }
     }
 
@@ -1222,40 +1557,55 @@ export const ProductModal = ({
         nextErrors.variants = 'Add at least one variant';
       }
 
+      const seenSkus = new Map();
+      const seenBarcodes = new Map();
+
       formData.variants.forEach((variant, index) => {
         if (!variant.variantName.trim()) {
           nextErrors[`variant_${index}_variantName`] =
             'Variant name is required';
         }
-
         if (!isValidNumber(variant.quantity, 0.001)) {
           nextErrors[`variant_${index}_quantity`] =
             'Enter a valid quantity';
         }
-
         if (!variant.unit) {
-          nextErrors[`variant_${index}_unit`] =
-            'Select a unit';
+          nextErrors[`variant_${index}_unit`] = 'Select a unit';
         }
-
         if (!isValidNumber(variant.purchasePrice)) {
           nextErrors[`variant_${index}_purchasePrice`] =
             'Enter a valid purchase price';
         }
-
         if (!isValidNumber(variant.sellingPrice)) {
           nextErrors[`variant_${index}_sellingPrice`] =
             'Enter a valid selling price';
         }
-
-        if (!isEdit && !isValidNumber(variant.stock)) {
+        if ((!isEdit || !variant._id) && !isValidNumber(variant.stock)) {
           nextErrors[`variant_${index}_stock`] =
             'Enter a valid stock quantity';
         }
-
         if (!isValidNumber(variant.lowStockLimit)) {
           nextErrors[`variant_${index}_lowStockLimit`] =
             'Enter a valid low stock limit';
+        }
+
+        const normalizedSku = variant.sku.trim().toUpperCase();
+        if (normalizedSku) {
+          if (seenSkus.has(normalizedSku)) {
+            nextErrors[`variant_${index}_sku`] = 'Duplicate SKU in variants';
+          } else {
+            seenSkus.set(normalizedSku, index);
+          }
+        }
+
+        const normalizedBarcode = variant.barcode.trim();
+        if (normalizedBarcode) {
+          if (seenBarcodes.has(normalizedBarcode)) {
+            nextErrors[`variant_${index}_barcode`] =
+              'Duplicate barcode in variants';
+          } else {
+            seenBarcodes.set(normalizedBarcode, index);
+          }
         }
       });
     }
@@ -1280,39 +1630,26 @@ export const ProductModal = ({
     return true;
   };
 
-  // --------------------------------------------------
-  // BUILD API PAYLOAD
-  // --------------------------------------------------
-
   const buildPayload = () => {
-    // During editing, hierarchy and sellingType are immutable.
-    // Therefore, do not send these fields in the update payload.
     const commonData = isEdit
       ? {}
       : {
-          categoryId: formData.categoryId,
-          mainProductId: formData.mainProductId,
-          brandProductId: formData.brandProductId,
+          categoryId: getId(formData.categoryId),
+          mainProductId: getId(formData.mainProductId),
+          brandProductId: getId(formData.brandProductId),
           sellingType: formData.sellingType,
         };
 
     if (formData.sellingType === 'LOOSE') {
       return {
         ...commonData,
-
         unit: formData.unit,
-
         purchasePrice: Number(formData.purchasePrice),
         sellingPrice: Number(formData.sellingPrice),
-
         gstRate: Number(formData.gstRate),
-
         lowStockLimit: Number(formData.lowStockLimit),
-
         sku: formData.sku.trim() || undefined,
         barcode: formData.barcode.trim() || undefined,
-
-        // Stock is sent only during creation.
         ...(!isEdit && {
           stock: Number(formData.stock),
         }),
@@ -1321,42 +1658,26 @@ export const ProductModal = ({
 
     return {
       ...commonData,
-
       gstRate: Number(formData.gstRate),
-
       variants: formData.variants.map((variant) => ({
-        ...(variant._id && {
-          _id: variant._id,
-        }),
-
+        ...(variant._id && { _id: variant._id }),
         variantName: variant.variantName.trim(),
-
         quantity: Number(variant.quantity),
-
         unit: variant.unit,
-
         purchasePrice: Number(variant.purchasePrice),
-
         sellingPrice: Number(variant.sellingPrice),
-
-        gstRate: Number(
-          variant.gstRate ?? formData.gstRate
-        ),
-
-        lowStockLimit: Number(
-          variant.lowStockLimit || 5
-        ),
-
+        gstRate: Number(variant.gstRate ?? formData.gstRate),
+        lowStockLimit:
+          variant.lowStockLimit === '' || variant.lowStockLimit == null
+            ? 5
+            : Number(variant.lowStockLimit),
         sku: variant.sku.trim() || undefined,
-
         barcode: variant.barcode.trim() || undefined,
-
         ...(variant.isActive !== undefined && {
           isActive: variant.isActive,
         }),
-
-        // Existing stock is never overwritten during editing.
-        ...(!isEdit && {
+        // Preserve existing variant stock on edit; send stock only for new variants
+        ...((!isEdit || !variant._id) && {
           stock: Number(variant.stock || 0),
         }),
       })),
@@ -1390,9 +1711,7 @@ export const ProductModal = ({
 
       await onSave(payload, productId);
     } catch (err) {
-      showError(
-        getErrorMessage(err, 'Unable to save product.')
-      );
+      showError(getErrorMessage(err, 'Unable to save product.'));
     }
   };
 
@@ -1419,7 +1738,6 @@ export const ProductModal = ({
       if (scannerTarget.type === 'variant') {
         setFormData((prev) => {
           const variants = [...prev.variants];
-
           variants[scannerTarget.index] = {
             ...variants[scannerTarget.index],
             barcode,
@@ -1444,320 +1762,201 @@ export const ProductModal = ({
   }, []);
 
   // --------------------------------------------------
-  // SECTION HEADING
-  // --------------------------------------------------
-
-  const sectionHeading = (Icon, title, description) => (
-    <div className="mb-4 flex items-center gap-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-orange-100 bg-orange-50 text-orange-600">
-        <Icon className="h-5 w-5" />
-      </div>
-
-      <div>
-        <h4 className="text-sm font-semibold text-slate-800">
-          {title}
-        </h4>
-
-        <p className="mt-0.5 text-xs text-slate-500">
-          {description}
-        </p>
-      </div>
-    </div>
-  );
-
-  // --------------------------------------------------
-  // VARIANT FORM
-  // --------------------------------------------------
-
-  const renderVariant = (variant, index) => (
-    <div
-      key={variant._id || `variant-${index}`}
-      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-    >
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h5 className="text-sm font-semibold text-slate-800">
-            Variant {index + 1}
-          </h5>
-
-          <p className="mt-1 text-xs text-slate-500">
-            Example: 500gm, 1kg, 5kg or Small, Large
-          </p>
-        </div>
-
-        {formData.variants.length > 1 && (
-          <button
-            type="button"
-            onClick={() => removeVariant(index)}
-            className="rounded-lg p-2 text-rose-500 hover:bg-rose-50"
-            aria-label={`Remove variant ${index + 1}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        <Input
-          label="Variant Name"
-          placeholder="e.g. 1kg Packet"
-          value={variant.variantName}
-          onChange={(e) =>
-            handleVariantChange(
-              index,
-              'variantName',
-              e.target.value
-            )
-          }
-          error={errors[`variant_${index}_variantName`]}
-          required
-        />
-
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="Package Quantity"
-            type="number"
-            min="0.001"
-            step="0.001"
-            value={variant.quantity}
-            onChange={(e) =>
-              handleVariantChange(
-                index,
-                'quantity',
-                e.target.value
-              )
-            }
-            error={errors[`variant_${index}_quantity`]}
-            required
-          />
-
-          <Select
-            label="Unit"
-            value={variant.unit}
-            onChange={(e) =>
-              handleVariantChange(
-                index,
-                'unit',
-                e.target.value
-              )
-            }
-            options={unitOptions}
-            error={errors[`variant_${index}_unit`]}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="Purchase Price"
-            type="number"
-            min="0"
-            step="0.01"
-            value={variant.purchasePrice}
-            onChange={(e) =>
-              handleVariantChange(
-                index,
-                'purchasePrice',
-                e.target.value
-              )
-            }
-            error={errors[`variant_${index}_purchasePrice`]}
-            required
-          />
-
-          <Input
-            label="Selling Price"
-            type="number"
-            min="0"
-            step="0.01"
-            value={variant.sellingPrice}
-            onChange={(e) =>
-              handleVariantChange(
-                index,
-                'sellingPrice',
-                e.target.value
-              )
-            }
-            error={errors[`variant_${index}_sellingPrice`]}
-            required
-          />
-        </div>
-
-        <Select
-          label="GST Rate"
-          value={String(
-            variant.gstRate ?? formData.gstRate
-          )}
-          onChange={(e) =>
-            handleVariantChange(
-              index,
-              'gstRate',
-              Number(e.target.value)
-            )
-          }
-          options={gstOptions}
-        />
-
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="SKU"
-            placeholder="e.g. TATA-1KG"
-            value={variant.sku}
-            onChange={(e) =>
-              handleVariantChange(
-                index,
-                'sku',
-                e.target.value
-              )
-            }
-          />
-
-          <Input
-            label="Barcode"
-            placeholder="Barcode"
-            value={variant.barcode}
-            onChange={(e) =>
-              handleVariantChange(
-                index,
-                'barcode',
-                e.target.value
-              )
-            }
-          />
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            openScanner({
-              type: 'variant',
-              index,
-            })
-          }
-        >
-          <Barcode className="mr-2 h-4 w-4" />
-          Scan Variant Barcode
-        </Button>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label={`Initial Stock (${variant.unit})`}
-            type="number"
-            min="0"
-            step="0.001"
-            value={variant.stock}
-            onChange={(e) =>
-              handleVariantChange(
-                index,
-                'stock',
-                e.target.value
-              )
-            }
-            error={errors[`variant_${index}_stock`]}
-            disabled={isEdit}
-            required={!isEdit}
-          />
-
-          <Input
-            label="Low Stock Alert"
-            type="number"
-            min="0"
-            step="0.001"
-            value={variant.lowStockLimit}
-            onChange={(e) =>
-              handleVariantChange(
-                index,
-                'lowStockLimit',
-                e.target.value
-              )
-            }
-            error={errors[`variant_${index}_lowStockLimit`]}
-          />
-        </div>
-
-        {isEdit && (
-          <p className="text-xs text-slate-500">
-            Current stock: {variant.stock} {variant.unit}.
-            Use stock adjustment to change it.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-
-  // --------------------------------------------------
-  // SELECTED CATALOGUE SUMMARY
+  // SELECTED CATALOGUE SUMMARY & RESOLUTION
   // --------------------------------------------------
 
   const selectedCategory = categories.find(
-    (item) =>
-      String(getId(item)) === String(formData.categoryId)
+    (item) => String(getId(item)) === String(formData.categoryId)
   );
 
   const selectedMainProduct = mainProducts.find(
-    (item) =>
-      String(getId(item)) === String(formData.mainProductId)
+    (item) => String(getId(item)) === String(formData.mainProductId)
   );
 
   const selectedBrandProduct = brandProducts.find(
-    (item) =>
-      String(getId(item)) === String(formData.brandProductId)
+    (item) => String(getId(item)) === String(formData.brandProductId)
   );
 
-  // --------------------------------------------------
-  // WIZARD ROUTE NAVIGATION
-  // --------------------------------------------------
-
-  const getCreateRoute = (step) => {
-    const category = categories.find(
-      (item) =>
-        String(getId(item)) === String(formData.categoryId)
-    );
-
-    const mainProduct = mainProducts.find(
-      (item) =>
-        String(getId(item)) === String(formData.mainProductId)
-    );
-
-    const brandProduct = brandProducts.find(
-      (item) =>
-        String(getId(item)) === String(formData.brandProductId)
-    );
-
-    if (step <= 1 || !category) {
-      return '/product/create';
+  useEffect(() => {
+    if (!isOpen) {
+      setResolvedCatalogue({
+        category: '',
+        mainProduct: '',
+        brandProduct: '',
+      });
+      return;
     }
 
-    const categoryPath = routeSegment(category);
+    let cancelled = false;
 
-    if (step === 2 || !mainProduct) {
-      return `/product/create/${categoryPath}`;
-    }
+    const immediateCategory =
+      getRefName(activeProduct?.categoryId) ||
+      (typeof activeProduct?.category === 'string'
+        ? activeProduct.category
+        : '') ||
+      getRefName(wizardCatalogue.category) ||
+      selectedCategory?.name ||
+      '';
 
-    const mainProductPath = routeSegment(mainProduct);
+    const immediateMainProduct =
+      getRefName(activeProduct?.mainProductId) ||
+      (typeof activeProduct?.mainProduct === 'string'
+        ? activeProduct.mainProduct
+        : '') ||
+      getRefName(wizardCatalogue.mainProduct) ||
+      selectedMainProduct?.name ||
+      '';
 
-    if (step === 3 || !brandProduct) {
-      return `/product/create/${categoryPath}/${mainProductPath}`;
-    }
+    const immediateBrandProduct =
+      getRefName(activeProduct?.brandProductId) ||
+      (typeof activeProduct?.name === 'string'
+        ? activeProduct.name
+        : '') ||
+      getRefName(wizardCatalogue.brandProduct) ||
+      getRefName(selectedBrandProduct) ||
+      '';
 
-    const brandProductPath = routeSegment(brandProduct);
+    setResolvedCatalogue({
+      category: immediateCategory,
+      mainProduct: immediateMainProduct,
+      brandProduct: immediateBrandProduct,
+    });
 
-    return `/product/create/${categoryPath}/${mainProductPath}/${brandProductPath}`;
+    const catId = formData.categoryId || getId(activeProduct?.categoryId);
+    const mainId =
+      formData.mainProductId || getId(activeProduct?.mainProductId);
+    const brandId =
+      formData.brandProductId || getId(activeProduct?.brandProductId);
+
+    const needsFetch =
+      (catId && !immediateCategory) ||
+      (mainId && !immediateMainProduct) ||
+      (brandId && !immediateBrandProduct);
+
+    if (!needsFetch) return;
+
+    const resolveMissingNames = async () => {
+      let nextCat = immediateCategory;
+      let nextMain = immediateMainProduct;
+      let nextBrand = immediateBrandProduct;
+
+      const activeId = getId(activeProduct);
+      if (
+        activeId &&
+        (typeof activeProduct?.categoryId !== 'object' ||
+          typeof activeProduct?.mainProductId !== 'object' ||
+          typeof activeProduct?.brandProductId !== 'object')
+      ) {
+        try {
+          const prodRes = await productService.getProductById(activeId);
+          const populated = unwrapProduct(prodRes);
+          if (populated && !cancelled) {
+            nextCat = nextCat || getRefName(populated.categoryId);
+            nextMain = nextMain || getRefName(populated.mainProductId);
+            nextBrand = nextBrand || getRefName(populated.brandProductId);
+            setActiveProduct((prev) =>
+              prev && String(getId(prev)) === String(activeId)
+                ? { ...prev, ...populated }
+                : prev
+            );
+          }
+        } catch {
+          // Fall through to individual record lookups
+        }
+      }
+
+      const [catRes, mainRes, brandRes] = await Promise.allSettled([
+        catId && !nextCat
+          ? productService.getCategoryById(catId)
+          : Promise.resolve(null),
+        mainId && !nextMain
+          ? productService.getMainProductById(mainId)
+          : Promise.resolve(null),
+        brandId && !nextBrand
+          ? productService.getBrandProductById(brandId)
+          : Promise.resolve(null),
+      ]);
+
+      if (cancelled) return;
+
+      if (catRes.status === 'fulfilled' && catRes.value) {
+        const c =
+          catRes.value.category ||
+          catRes.value.data?.category ||
+          catRes.value;
+        nextCat = nextCat || getRefName(c);
+      }
+
+      if (mainRes.status === 'fulfilled' && mainRes.value) {
+        const m =
+          mainRes.value.mainProduct ||
+          mainRes.value.data?.mainProduct ||
+          mainRes.value;
+        nextMain = nextMain || getRefName(m);
+      }
+
+      if (brandRes.status === 'fulfilled' && brandRes.value) {
+        const b =
+          brandRes.value.brandProduct ||
+          brandRes.value.data?.brandProduct ||
+          brandRes.value;
+        nextBrand = nextBrand || getRefName(b);
+      }
+
+      setResolvedCatalogue({
+        category: nextCat,
+        mainProduct: nextMain,
+        brandProduct: nextBrand,
+      });
+    };
+
+    resolveMissingNames();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isOpen,
+    activeProduct,
+    formData.categoryId,
+    formData.mainProductId,
+    formData.brandProductId,
+    selectedCategory,
+    selectedMainProduct,
+    selectedBrandProduct,
+    wizardCatalogue,
+  ]);
+
+  const catalogueDisplay = {
+    category:
+      resolvedCatalogue.category ||
+      getRefName(wizardCatalogue.category) ||
+      selectedCategory?.name ||
+      getRefName(activeProduct?.categoryId) ||
+      '',
+    mainProduct:
+      resolvedCatalogue.mainProduct ||
+      getRefName(wizardCatalogue.mainProduct) ||
+      selectedMainProduct?.name ||
+      getRefName(activeProduct?.mainProductId) ||
+      '',
+    brandProduct:
+      resolvedCatalogue.brandProduct ||
+      getRefName(wizardCatalogue.brandProduct) ||
+      getRefName(selectedBrandProduct) ||
+      getRefName(activeProduct?.brandProductId) ||
+      '',
   };
 
-  const goToWizardStep = (step) => {
-    if (step < 1 || step > 4 || isEdit) return;
-
-    navigate(getCreateRoute(step));
-  };
+  // Keep getCreateRoute referenced if needed by any future step links
+  void getCreateRoute;
 
   // --------------------------------------------------
   // FOOTER
   // --------------------------------------------------
 
   const renderFooter = () => {
-    if (!isEdit) {
+    if (!isDirectEdit) {
       const canContinue =
         (wizardStep === 1 && Boolean(formData.categoryId)) ||
         (wizardStep === 2 && Boolean(formData.mainProductId)) ||
@@ -1781,8 +1980,19 @@ export const ProductModal = ({
           return;
         }
 
+        if (wizardStep === 3) {
+          openProductDetails();
+          return;
+        }
+
         goToWizardStep(wizardStep + 1);
       };
+
+      const step3Label = productLookupLoading
+        ? 'Checking...'
+        : detectedProduct
+          ? 'Edit Product'
+          : 'Create Product';
 
       return (
         <div className="flex w-full items-center justify-between gap-4">
@@ -1811,7 +2021,7 @@ export const ProductModal = ({
                 }
                 className="rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Next →
+                {wizardStep === 3 ? step3Label : 'Continue'}
               </button>
             ) : (
               <button
@@ -1822,9 +2032,15 @@ export const ProductModal = ({
                   catalogueLoading ||
                   productLookupLoading
                 }
-                className="rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {loading ? 'Creating...' : 'Create Product'}
+                {loading
+                  ? isEdit
+                    ? 'Saving...'
+                    : 'Creating...'
+                  : isEdit
+                    ? 'Save Changes'
+                    : 'Create Product'}
               </button>
             )}
           </div>
@@ -1862,641 +2078,62 @@ export const ProductModal = ({
   // FORM CONTENT
   // --------------------------------------------------
 
+  const fieldsElement = (
+    <ProductModalFields
+      isEdit={isEdit}
+      formData={formData}
+      errors={errors}
+      unitOptions={unitOptions}
+      gstOptions={gstOptions}
+      catalogueDisplay={catalogueDisplay}
+      handleChange={handleChange}
+      handleVariantChange={handleVariantChange}
+      addVariant={addVariant}
+      removeVariant={removeVariant}
+      openScanner={openScanner}
+    />
+  );
+
   const formContent = (
     <form
       id="product-form"
       onSubmit={handleSubmit}
       className="space-y-6"
     >
-      {/* ================================== */}
-      {/* CREATE MODE */}
-      {/* ================================== */}
-
-      {!isEdit && (
-        <>
-          {catalogueError && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-              {catalogueError}
-            </div>
-          )}
-
-          {wizardStep === 1 && (
-            <CategoryStep
-              categories={categories}
-              selectedCategoryId={formData.categoryId}
-              onSelect={handleWizardCategorySelect}
-              onCategoryCreated={handleCategoryCreated}
-              onCategoryUpdated={handleCategoryUpdated}
-              onCategoryDeleted={handleCategoryDeleted}
-            />
-          )}
-
-          {wizardStep === 2 && (
-            <MainProductStep
-              mainProducts={mainProducts}
-              selectedMainProductId={formData.mainProductId}
-              categoryId={formData.categoryId}
-              onSelect={handleWizardMainProductSelect}
-              onMainProductCreated={handleMainProductCreated}
-              onMainProductUpdated={handleMainProductUpdated}
-              onMainProductDeleted={handleMainProductDeleted}
-              onBack={() => goToWizardStep(1)}
-            />
-          )}
-
-          {wizardStep === 3 && (
-            <BrandProductStep
-              brandProducts={brandProducts}
-              selectedBrandProductId={formData.brandProductId}
-              mainProductId={formData.mainProductId}
-              onSelect={handleWizardBrandProductSelect}
-              onBrandProductCreated={handleBrandProductCreated}
-              onBrandProductUpdated={handleBrandProductUpdated}
-              onBrandProductDeleted={handleBrandProductDeleted}
-              onBack={() => goToWizardStep(2)}
-            />
-          )}
-
-          {wizardStep === 4 && (
-            <section className="space-y-5">
-              <div>
-                <h3 className="text-base font-semibold text-slate-800">
-                  Product Details
-                </h3>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Confirm the catalogue selection and configure inventory.
-                </p>
-              </div>
-
-              {/* SELECTED CATALOGUE */}
-
-              <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
-                <h4 className="mb-3 text-sm font-semibold text-slate-800">
-                  Selected Catalogue
-                </h4>
-
-                <div className="space-y-3">
-                  {[
-                    {
-                      label: 'Category',
-                      value: selectedCategory?.name || 'Selected',
-                      step: 1,
-                    },
-                    {
-                      label: 'Main Product',
-                      value: selectedMainProduct?.name || 'Selected',
-                      step: 2,
-                    },
-                    {
-                      label: 'Brand Product',
-                      value:
-                        selectedBrandProduct?.name ||
-                        selectedBrandProduct?.brandName ||
-                        'Selected',
-                      step: 3,
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <div className="flex items-center gap-2 text-slate-500">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        {item.label}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-800">
-                          {item.value}
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={() => goToWizardStep(item.step)}
-                          className="text-xs text-orange-600 hover:underline"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* SELLING CONFIGURATION */}
-
-              <section>
-                {sectionHeading(
-                  Layers,
-                  'Selling Configuration',
-                  'Choose how this product is sold'
-                )}
-
-                <Select
-                  label="Selling Type"
-                  name="sellingType"
-                  value={formData.sellingType}
-                  onChange={handleChange}
-                  options={[
-                    {
-                      value: 'LOOSE',
-                      label: 'Loose Product',
-                    },
-                    {
-                      value: 'VARIANT',
-                      label: 'Product with Variants / Packages',
-                    },
-                  ]}
-                  error={errors.sellingType}
-                />
-
-                <div className="mt-3 rounded-xl border border-orange-100 bg-orange-50/70 p-3">
-                  {formData.sellingType === 'LOOSE' ? (
-                    <>
-                      <p className="text-sm font-medium text-slate-700">
-                        Loose Product
-                      </p>
-
-                      <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                        Use for products sold by weight or measurement,
-                        such as rice, sugar, potatoes or oil.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-medium text-slate-700">
-                        Product with Variants
-                      </p>
-
-                      <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                        Use for different package sizes or options,
-                        such as 500gm, 1kg and 5kg packets.
-                      </p>
-                    </>
-                  )}
-                </div>
-              </section>
-
-              {/* LOOSE PRODUCT */}
-
-              {formData.sellingType === 'LOOSE' && (
-                <>
-                  <section>
-                    {sectionHeading(
-                      Tag,
-                      'Pricing Information',
-                      'Set purchase and selling prices'
-                    )}
-
-                    <div className="space-y-4">
-                      <Select
-                        label="Measurement Unit"
-                        name="unit"
-                        value={formData.unit}
-                        onChange={handleChange}
-                        options={unitOptions}
-                        error={errors.unit}
-                      />
-
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <Input
-                          label="Purchase Price"
-                          type="number"
-                          name="purchasePrice"
-                          min="0"
-                          step="0.01"
-                          value={formData.purchasePrice}
-                          onChange={handleChange}
-                          error={errors.purchasePrice}
-                          required
-                        />
-
-                        <Input
-                          label={`Selling Price (per ${formData.unit})`}
-                          type="number"
-                          name="sellingPrice"
-                          min="0"
-                          step="0.01"
-                          value={formData.sellingPrice}
-                          onChange={handleChange}
-                          error={errors.sellingPrice}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </section>
-
-                  <section>
-                    {sectionHeading(
-                      Layers,
-                      'Inventory Information',
-                      'Manage initial quantity and stock alerts'
-                    )}
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Input
-                        label={`Initial Stock (${formData.unit})`}
-                        type="number"
-                        name="stock"
-                        min="0"
-                        step="0.001"
-                        value={formData.stock}
-                        onChange={handleChange}
-                        error={errors.stock}
-                        required
-                      />
-
-                      <Input
-                        label={`Low Stock Alert (${formData.unit})`}
-                        type="number"
-                        name="lowStockLimit"
-                        min="0"
-                        step="0.001"
-                        value={formData.lowStockLimit}
-                        onChange={handleChange}
-                        error={errors.lowStockLimit}
-                      />
-                    </div>
-                  </section>
-
-                  <section>
-                    {sectionHeading(
-                      Barcode,
-                      'Product Identification',
-                      'SKU and barcode details'
-                    )}
-
-                    <div className="space-y-3">
-                      <Input
-                        label="SKU"
-                        name="sku"
-                        placeholder="e.g. RICE-001"
-                        value={formData.sku}
-                        onChange={handleChange}
-                      />
-
-                      <Input
-                        label="Barcode"
-                        name="barcode"
-                        placeholder="Enter or scan barcode"
-                        value={formData.barcode}
-                        onChange={handleChange}
-                      />
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          openScanner({ type: 'loose' })
-                        }
-                      >
-                        <Barcode className="mr-2 h-4 w-4" />
-                        Scan Barcode
-                      </Button>
-                    </div>
-                  </section>
-                </>
-              )}
-
-              {/* VARIANT PRODUCT */}
-
-              {formData.sellingType === 'VARIANT' && (
-                <section>
-                  {sectionHeading(
-                    Layers,
-                    'Product Variants',
-                    'Add package sizes with separate pricing and stock'
-                  )}
-
-                  <div className="space-y-4">
-                    {formData.variants.map(renderVariant)}
-
-                    {errors.variants && (
-                      <p className="text-xs text-rose-500">
-                        {errors.variants}
-                      </p>
-                    )}
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addVariant}
-                      className="w-full"
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Another Variant
-                    </Button>
-                  </div>
-                </section>
-              )}
-
-              {/* GST */}
-
-              <section>
-                {sectionHeading(
-                  Percent,
-                  'Tax Information',
-                  'Set the default GST rate'
-                )}
-
-                <Select
-                  label="GST Rate"
-                  name="gstRate"
-                  value={String(formData.gstRate)}
-                  onChange={(e) =>
-                    handleChange({
-                      target: {
-                        name: 'gstRate',
-                        value: Number(e.target.value),
-                      },
-                    })
-                  }
-                  options={gstOptions}
-                />
-              </section>
-            </section>
-          )}
-        </>
-      )}
-
-      {/* ================================== */}
-      {/* EDIT MODE */}
-      {/* ================================== */}
-
-      {isEdit && (
-        <>
-          {/* IMMUTABLE CATALOGUE INFORMATION */}
-
-          <section>
-            {sectionHeading(
-              Package,
-              'Product Catalogue',
-              'Catalogue selection cannot be changed after product creation'
-            )}
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="space-y-3">
-                {[
-                  {
-                    label: 'Category',
-                    value:
-                      activeProduct?.categoryId?.name ||
-                      selectedCategory?.name ||
-                      'Category',
-                  },
-                  {
-                    label: 'Main Product',
-                    value:
-                      activeProduct?.mainProductId?.name ||
-                      selectedMainProduct?.name ||
-                      'Main Product',
-                  },
-                  {
-                    label: 'Brand Product',
-                    value:
-                      activeProduct?.brandProductId?.name ||
-                      activeProduct?.brandProductId?.brandName ||
-                      selectedBrandProduct?.name ||
-                      selectedBrandProduct?.brandName ||
-                      'Brand Product',
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex items-center justify-between gap-3 text-sm"
-                  >
-                    <span className="text-slate-500">
-                      {item.label}
-                    </span>
-
-                    <span className="font-medium text-slate-800">
-                      {item.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-3 flex items-center gap-2 border-t border-slate-200 pt-3 text-xs text-slate-500">
-                <Lock className="h-3.5 w-3.5" />
-                Catalogue hierarchy is locked after creation.
-              </div>
-            </div>
-          </section>
-
-          {/* IMMUTABLE SELLING TYPE */}
-
-          <section>
-            {sectionHeading(
-              Layers,
-              'Selling Configuration',
-              'Selling type is fixed after product creation'
-            )}
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    {formData.sellingType === 'LOOSE'
-                      ? 'Loose Product'
-                      : 'Product with Variants / Packages'}
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-500">
-                    {formData.sellingType === 'LOOSE'
-                      ? 'Sold by weight or measurement.'
-                      : 'Sold in different package sizes or options.'}
-                  </p>
-                </div>
-
-                <Lock className="h-4 w-4 text-slate-400" />
-              </div>
-            </div>
-          </section>
-
-          {/* LOOSE PRODUCT */}
-
-          {formData.sellingType === 'LOOSE' && (
-            <>
-              <section>
-                {sectionHeading(
-                  Tag,
-                  'Pricing Information',
-                  'Set purchase and selling prices'
-                )}
-
-                <div className="space-y-4">
-                  <Select
-                    label="Measurement Unit"
-                    name="unit"
-                    value={formData.unit}
-                    onChange={handleChange}
-                    options={unitOptions}
-                    error={errors.unit}
-                  />
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Input
-                      label="Purchase Price"
-                      type="number"
-                      name="purchasePrice"
-                      min="0"
-                      step="0.01"
-                      value={formData.purchasePrice}
-                      onChange={handleChange}
-                      error={errors.purchasePrice}
-                      required
-                    />
-
-                    <Input
-                      label={`Selling Price (per ${formData.unit})`}
-                      type="number"
-                      name="sellingPrice"
-                      min="0"
-                      step="0.01"
-                      value={formData.sellingPrice}
-                      onChange={handleChange}
-                      error={errors.sellingPrice}
-                      required
-                    />
-                  </div>
-                </div>
-              </section>
-
-              <section>
-                {sectionHeading(
-                  Layers,
-                  'Inventory Information',
-                  'Manage available quantity and stock alerts'
-                )}
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Input
-                    label={`Current Stock (${formData.unit})`}
-                    type="number"
-                    name="stock"
-                    value={formData.stock}
-                    disabled
-                  />
-
-                  <Input
-                    label={`Low Stock Alert (${formData.unit})`}
-                    type="number"
-                    name="lowStockLimit"
-                    min="0"
-                    step="0.001"
-                    value={formData.lowStockLimit}
-                    onChange={handleChange}
-                    error={errors.lowStockLimit}
-                  />
-                </div>
-
-                <p className="mt-2 text-xs text-slate-500">
-                  Existing stock is not changed here. Use inventory
-                  adjustments to update available stock.
-                </p>
-              </section>
-
-              <section>
-                {sectionHeading(
-                  Barcode,
-                  'Product Identification',
-                  'SKU and barcode details'
-                )}
-
-                <div className="space-y-3">
-                  <Input
-                    label="SKU"
-                    name="sku"
-                    placeholder="e.g. RICE-001"
-                    value={formData.sku}
-                    onChange={handleChange}
-                  />
-
-                  <Input
-                    label="Barcode"
-                    name="barcode"
-                    placeholder="Enter or scan barcode"
-                    value={formData.barcode}
-                    onChange={handleChange}
-                  />
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      openScanner({ type: 'loose' })
-                    }
-                  >
-                    <Barcode className="mr-2 h-4 w-4" />
-                    Scan Barcode
-                  </Button>
-                </div>
-              </section>
-            </>
-          )}
-
-          {/* VARIANT PRODUCT */}
-
-          {formData.sellingType === 'VARIANT' && (
-            <section>
-              {sectionHeading(
-                Layers,
-                'Product Variants',
-                'Edit existing variants, add new variants or remove variants'
-              )}
-
-              <div className="space-y-4">
-                {formData.variants.map(renderVariant)}
-
-                {errors.variants && (
-                  <p className="text-xs text-rose-500">
-                    {errors.variants}
-                  </p>
-                )}
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addVariant}
-                  className="w-full"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Another Variant
-                </Button>
-              </div>
-            </section>
-          )}
-
-          {/* GST */}
-
-          <section>
-            {sectionHeading(
-              Percent,
-              'Tax Information',
-              'Set the default GST rate'
-            )}
-
-            <Select
-              label="GST Rate"
-              name="gstRate"
-              value={String(formData.gstRate)}
-              onChange={(e) =>
-                handleChange({
-                  target: {
-                    name: 'gstRate',
-                    value: Number(e.target.value),
-                  },
-                })
-              }
-              options={gstOptions}
-            />
-          </section>
-        </>
+      {!isDirectEdit ? (
+        <ProductModalSteps
+          wizardStep={wizardStep}
+          isEdit={isEdit}
+          categories={categories}
+          mainProducts={mainProducts}
+          brandProducts={brandProducts}
+          categoriesLoading={categoriesLoading}
+          mainProductsLoading={mainProductsLoading}
+          brandProductsLoading={brandProductsLoading}
+          catalogueError={catalogueError}
+          formData={formData}
+          catalogueDisplay={catalogueDisplay}
+          goToWizardStep={goToWizardStep}
+          onCategorySelect={handleWizardCategorySelect}
+          onCategoryDoubleClick={handleWizardCategoryDoubleClick}
+          onCategoryCreated={handleCategoryCreated}
+          onCategoryUpdated={handleCategoryUpdated}
+          onCategoryDeleted={handleCategoryDeleted}
+          onMainProductSelect={handleWizardMainProductSelect}
+          onMainProductDoubleClick={handleWizardMainProductDoubleClick}
+          onMainProductCreated={handleMainProductCreated}
+          onMainProductUpdated={handleMainProductUpdated}
+          onMainProductDeleted={handleMainProductDeleted}
+          onBrandProductSelect={handleWizardBrandProductSelect}
+          onBrandProductDoubleClick={handleWizardBrandProductDoubleClick}
+          onBrandProductCreated={handleBrandProductCreated}
+          onBrandProductUpdated={handleBrandProductUpdated}
+          onBrandProductDeleted={handleBrandProductDeleted}
+        >
+          {fieldsElement}
+        </ProductModalSteps>
+      ) : (
+        fieldsElement
       )}
     </form>
   );
@@ -2509,9 +2146,7 @@ export const ProductModal = ({
 
   return (
     <>
-      {/* EDIT PRODUCT */}
-
-      {isEdit ? (
+      {isDirectEdit ? (
         <Modal
           isOpen={isOpen}
           onClose={closePage}
@@ -2526,18 +2161,19 @@ export const ProductModal = ({
             </div>
           )}
 
-          {formContent}
+          {productLookupLoading ? (
+            <CenteredLoader message="Loading product details..." />
+          ) : (
+            formContent
+          )}
         </Modal>
       ) : (
-        /* CREATE PRODUCT */
-
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:p-5 lg:p-8">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-slate-950/45 p-2 backdrop-blur-md sm:p-4 lg:p-6">
           <div
-            className="relative flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-2xl sm:rounded-3xl"
+            className="relative flex h-[90vh] max-h-[950px] w-[95vw] max-w-[1600px] flex-col overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-2xl sm:rounded-3xl"
             onClick={(event) => event.stopPropagation()}
           >
             {/* MODAL HEADER */}
-
             <div className="flex shrink-0 items-center justify-between border-b border-orange-100 bg-white px-5 py-4 sm:px-7 sm:py-5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
@@ -2546,11 +2182,15 @@ export const ProductModal = ({
 
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-bold text-slate-900 sm:text-xl">
-                    Create New Product
+                    {wizardStep === 4 && isEdit
+                      ? 'Edit Product'
+                      : 'Create New Product'}
                   </h2>
 
                   <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
-                    Add a new product to your inventory
+                    {wizardStep === 4 && isEdit
+                      ? 'Update existing product pricing, tax, and variants'
+                      : 'Add a new product to your inventory'}
                   </p>
                 </div>
               </div>
@@ -2559,7 +2199,7 @@ export const ProductModal = ({
                 type="button"
                 onClick={closePage}
                 disabled={loading}
-                aria-label="Close product creation"
+                aria-label="Close product modal"
                 title="Close"
                 className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -2568,75 +2208,18 @@ export const ProductModal = ({
             </div>
 
             {/* WIZARD PROGRESS */}
-
-            <div className="shrink-0 border-b border-slate-100 bg-slate-50/70 px-5 py-3 sm:px-7">
-              <div className="flex items-center justify-between gap-2">
-                {[
-                  { step: 1, label: 'Category' },
-                  { step: 2, label: 'Main Product' },
-                  { step: 3, label: 'Brand Product' },
-                  { step: 4, label: 'Details' },
-                ].map((item, index) => (
-                  <React.Fragment key={item.step}>
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
-                          wizardStep >= item.step
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-slate-200 text-slate-500'
-                        }`}
-                      >
-                        {wizardStep > item.step ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          item.step
-                        )}
-                      </div>
-
-                      <span
-                        className={`hidden truncate text-xs font-medium sm:inline ${
-                          wizardStep === item.step
-                            ? 'text-orange-600'
-                            : wizardStep > item.step
-                              ? 'text-slate-700'
-                              : 'text-slate-400'
-                        }`}
-                      >
-                        {item.label}
-                      </span>
-                    </div>
-
-                    {index !== 3 && (
-                      <div
-                        className={`h-px min-w-3 flex-1 ${
-                          wizardStep > item.step
-                            ? 'bg-orange-400'
-                            : 'bg-slate-200'
-                        }`}
-                      />
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-            </div>
+            <WizardProgress wizardStep={wizardStep} isEdit={isEdit} />
 
             {/* MODAL BODY */}
-
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 sm:py-6">
-              {(catalogueLoading || productLookupLoading) && (
-                <div className="mb-4 flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />
-                  {productLookupLoading
-                    ? 'Checking existing product...'
-                    : 'Loading catalogue...'}
-                </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-4 sm:px-7 sm:py-6">
+              {catalogueLoading ? (
+                <CenteredLoader message="Loading catalogue..." minHeight="min-h-full" />
+              ) : (
+                formContent
               )}
-
-              {formContent}
             </div>
 
             {/* MODAL FOOTER */}
-
             <div className="flex shrink-0 items-center border-t border-orange-100 bg-white px-5 py-4 sm:px-7">
               {renderFooter()}
             </div>
@@ -2645,7 +2228,6 @@ export const ProductModal = ({
       )}
 
       {/* BARCODE SCANNER */}
-
       {showScanner && (
         <BarcodeScanner
           isOpen={showScanner}

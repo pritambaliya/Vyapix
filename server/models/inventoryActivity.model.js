@@ -23,6 +23,16 @@ const inventoryActivitySchema = new mongoose.Schema(
             index: true,
         },
 
+        variantId: {
+            type: mongoose.Schema.Types.ObjectId,
+            default: null,
+        },
+
+        variantName: {
+            type: String,
+            default: null,
+        },
+
         billingAccountId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "BillingAccount",

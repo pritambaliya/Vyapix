@@ -9,7 +9,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../Components/common/SEO';
 import PasswordStrength, { isPasswordStrong } from '../../Components/common/PasswordStrength';
-import ToastContainer from '../../Components/common/ToastContainer';
 import LoadingOverlay from '../../Components/common/LoadingOverlay';
 import PhoneNumberInput from '../../Components/common/PhoneNumberInput';
 
@@ -217,8 +216,6 @@ export const RegisterPage = () => {
         path="/register"
         noIndex
       />
-
-      <ToastContainer />
 
       {loading && (
         <LoadingOverlay loading={loading} />

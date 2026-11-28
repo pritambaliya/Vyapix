@@ -14,6 +14,18 @@
   }
 }
 
+@keyframes toastSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .page-enter {
   animation: pageFadeIn 0.7s ease-out both;
 }

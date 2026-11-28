@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /contact
+Allow: /pricing
+Allow: /features/
+Allow: /solutions/
+
+Disallow: /login
+Disallow: /register
+Disallow: /dashboard
+Disallow: /billing
+Disallow: /products
+Disallow: /product/
+Disallow: /invoices
+Disallow: /accounts
+Disallow: /activity
+Disallow: /profile

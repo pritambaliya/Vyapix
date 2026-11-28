@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
@@ -12,6 +12,7 @@ import categoryRoutes from "./routes/ProductRoutes/category.routes.js";
 import mainProductRoutes from "./routes/ProductRoutes/mainProduct.routes.js";
 import brandProductRoutes from "./routes/ProductRoutes/brandProduct.routes.js";
 import archiveRoutes from "./routes/archive.routes.js";
+import dashboardRoutes from "./routes/dashboard.route.js";
 
 dotenv.config();
 const app = express();
@@ -48,6 +49,7 @@ app.use("/api/brand-products", brandProductRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/bills", billRoutes);
 app.use("/api/archive", archiveRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use((req, res) => {
     res.status(404).json({
         success: false,

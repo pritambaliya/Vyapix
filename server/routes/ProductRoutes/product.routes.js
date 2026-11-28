@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 
 import {
     createProduct,
@@ -14,6 +14,7 @@ import {
 
 import authMiddleware from "../../middleware/auth.middleware.js";
 import billingAuthMiddleware from "../../middleware/billingAuth.middleware.js";
+import flexAuthMiddleware from "../../middleware/flexAuth.middleware.js";
 
 const router = express.Router();
  
@@ -73,7 +74,7 @@ router.get(
 
 router.get(
     "/billing/barcode/:barcode",
-    billingAuthMiddleware,
+    flexAuthMiddleware,
     getProductByBarcode
 );
 

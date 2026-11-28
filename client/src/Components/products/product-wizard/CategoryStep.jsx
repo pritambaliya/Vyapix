@@ -13,6 +13,7 @@ import {
 
 import CreateCategoryModal from "./CreateCategoryModal";
 import productService from "../../../services/productService";
+import { useToast } from "../../../context/ToastContext";
 
 const getId = (item) => {
     const id = item?._id || item?.id || "";
@@ -22,11 +23,14 @@ const getId = (item) => {
 const CategoryStep = ({
     categories = [],
     selectedCategoryId,
+    loading = false,
     onSelect,
+    onDoubleClick,
     onCategoryCreated,
     onCategoryUpdated,
     onCategoryDeleted,
 }) => {
+    const { success, error: showError } = useToast();
     const [search, setSearch] = useState("");
 
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -135,13 +139,15 @@ const CategoryStep = ({
             onCategoryDeleted?.(categoryId);
 
             setDeletingCategory(null);
+            success("Category deleted successfully.");
 
         } catch (err) {
-            setDeleteError(
+            const msg =
                 err?.response?.data?.message ||
                 err?.message ||
-                "Failed to delete category."
-            );
+                "Failed to delete category.";
+            setDeleteError(msg);
+            showError(msg);
         } finally {
             setDeleteLoading(false);
         }
@@ -206,7 +212,16 @@ const CategoryStep = ({
             </div>
 
             {/* CATEGORY LIST */}
-            {filteredCategories.length > 0 ? (
+            {loading ? (
+                <div className="flex min-h-[200px] w-full items-center justify-center">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                        <Loader2 className="h-7 w-7 animate-spin text-orange-500" />
+                        <p className="text-sm text-slate-500">
+                            Loading categories...
+                        </p>
+                    </div>
+                </div>
+            ) : filteredCategories.length > 0 ? (
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
 
@@ -221,6 +236,7 @@ const CategoryStep = ({
                                 key={categoryId}
                                 type="button"
                                 onClick={() => onSelect?.(category)}
+                                onDoubleClick={() => onDoubleClick?.(category)}
                                 onContextMenu={(e) =>
                                     handleContextMenu(e, category)
                                 }

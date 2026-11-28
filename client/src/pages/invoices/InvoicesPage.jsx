@@ -1,6 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {FileText, Download, Printer, Eye, RotateCcw, Search, ReceiptText, CircleDollarSign, ShoppingBag, CheckCircle2, Filter, Plus} from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  FileText,
+  Download,
+  Printer,
+  Eye,
+  RotateCcw,
+  ReceiptText,
+  Plus,
+  Monitor,
+  AlertCircle,
+  CircleDollarSign,
+  Clock,
+} from 'lucide-react';
 
 import Button from '../../Components/common/Button';
 import Badge from '../../Components/common/Badge';
@@ -9,21 +21,46 @@ import Pagination from '../../Components/common/Pagination';
 import EmptyState from '../../Components/common/EmptyState';
 import ConfirmModal from '../../Components/common/ConfirmModal';
 import { TableSkeleton } from '../../Components/common/Skeleton';
+import InvoiceDetailDrawer from '../../Components/invoices/InvoiceDetailDrawer';
+
 import billingService from '../../services/billingService';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
-import { downloadPdfBlob } from '../../utils/downloadPdf';
+import { downloadPdfBlob, previewOrPrintPdfBlob } from '../../utils/downloadPdf';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../Components/common/SEO';
 
+const getCounterLabel = (bill) => {
+  if (bill?.billingAccountId) {
+    return (
+      bill.billingAccountId.name ||
+      bill.billingAccountId.accountNumber ||
+      'Counter information unavailable'
+    );
+  }
+  if (bill?.ownerId) {
+    return 'Owner Desk';
+  }
+  return null;
+};
+
+const getPaymentBadgeVariant = (paymentStatus) => {
+  if (paymentStatus === 'paid') return 'success';
+  if (paymentStatus === 'partial') return 'warning';
+  return 'danger';
+};
+
 export const InvoicesPage = () => {
   const { isOwner } = useAuth();
   const { success, error } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
+  // Table data & pagination
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState('');
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 15,
@@ -31,32 +68,61 @@ export const InvoicesPage = () => {
     totalPages: 1,
   });
 
-  // Filters
-  const [search, setSearch] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('');
-  const [status, setStatus] = useState('');
+  // Minimal summary & counter list from backend
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summary, setSummary] = useState({
+    totalInvoices: 0,
+    totalSalesAmount: 0,
+    pendingAmount: 0,
+  });
+  const [counters, setCounters] = useState([]);
 
-  // Refund modal state
+  // Simple filters
+  const [search, setSearch] = useState('');
+  const [dateRange, setDateRange] = useState('all');
+  const [counterId, setCounterId] = useState(() => searchParams.get('counter') || '');
+  const [paymentStatus, setPaymentStatus] = useState('');
+
+  // Drawer, refund & PDF action state
+  const [selectedBill, setSelectedBill] = useState(null);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [billToRefund, setBillToRefund] = useState(null);
   const [refundLoading, setRefundLoading] = useState(false);
-
-  // PDF download loading states
   const [downloadingId, setDownloadingId] = useState(null);
 
   const debouncedSearch = useDebounce(search, 300);
 
-  const fetchBills = useCallback(async () => {
-    setLoading(true);
-    try {
+  // Sync URL ?counter= parameter when navigating from Dashboard
+  useEffect(() => {
+    const paramCounter = searchParams.get('counter') || '';
+    if (paramCounter !== counterId) {
+      setCounterId(paramCounter);
+      setPagination((prev) => ({ ...prev, page: 1 }));
+    }
+  }, [searchParams, counterId]);
+
+  const buildParams = useCallback(
+    (includePagination = true) => {
       const params = {
         search: debouncedSearch || undefined,
-        paymentMethod: paymentMethod || undefined,
-        status: status || undefined,
-        page: pagination.page,
-        limit: pagination.limit,
+        billingAccountId: isOwner && counterId ? counterId : undefined,
+        paymentStatus: paymentStatus || undefined,
+        dateRange,
       };
+      if (includePagination) {
+        params.page = pagination.page;
+        params.limit = pagination.limit;
+      }
+      return params;
+    },
+    [debouncedSearch, isOwner, counterId, paymentStatus, dateRange, pagination.page, pagination.limit]
+  );
 
+  const fetchBills = useCallback(async () => {
+    setLoading(true);
+    setApiError('');
+    try {
+      const params = buildParams(true);
       const res = isOwner
         ? await billingService.getOwnerBills(params)
         : await billingService.getBillingBills(params);
@@ -70,28 +136,85 @@ export const InvoicesPage = () => {
         setBills([]);
       }
     } catch (err) {
-      error(err.message || 'Failed to load invoices');
+      const msg = err?.response?.data?.message || err.message || 'Failed to load invoices';
+      setApiError(msg);
+      error(msg);
       setBills([]);
     } finally {
       setLoading(false);
     }
-  }, [
-    debouncedSearch,
-    paymentMethod,
-    status,
-    pagination.page,
-    pagination.limit,
-    isOwner,
-    error,
-  ]);
+  }, [buildParams, isOwner, error]);
+
+  const fetchSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    try {
+      const params = buildParams(false);
+      const res = isOwner
+        ? await billingService.getOwnerLedgerSummary(params)
+        : await billingService.getBillingLedgerSummary(params);
+
+      if (res.success && res.data) {
+        if (res.data.summary) {
+          setSummary({
+            totalInvoices: res.data.summary.totalInvoices ?? 0,
+            totalSalesAmount: res.data.summary.totalSalesAmount ?? 0,
+            pendingAmount: res.data.summary.pendingAmount ?? 0,
+          });
+        }
+        setCounters(res.data.counters || []);
+      }
+    } catch {
+      // Non-fatal; table error banner handles primary feedback
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [buildParams, isOwner]);
 
   useEffect(() => {
     fetchBills();
   }, [fetchBills]);
 
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
   const handleSearchChange = (value) => {
     setSearch(value);
     setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handleCounterChange = (nextCounterId) => {
+    setCounterId(nextCounterId);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    if (nextCounterId) {
+      setSearchParams({ counter: nextCounterId }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  };
+
+  const resetFilters = () => {
+    setSearch('');
+    setDateRange('all');
+    setCounterId('');
+    setPaymentStatus('');
+    setSearchParams({}, { replace: true });
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handlePrintInvoice = async (e, bill) => {
+    e.stopPropagation();
+    setDownloadingId(`${bill._id}-print`);
+    try {
+      const blob = isOwner
+        ? await billingService.downloadOwnerBillPDF(bill._id)
+        : await billingService.downloadBillingBillPDF(bill._id);
+      previewOrPrintPdfBlob(blob);
+    } catch {
+      error('Failed to open invoice for printing');
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handleDownloadA4 = async (e, bill) => {
@@ -101,28 +224,10 @@ export const InvoicesPage = () => {
       const blob = isOwner
         ? await billingService.downloadOwnerBillPDF(bill._id)
         : await billingService.downloadBillingBillPDF(bill._id);
-
       downloadPdfBlob(blob, `Invoice-${bill.invoiceNumber}.pdf`);
       success(`Invoice ${bill.invoiceNumber} downloaded`);
     } catch {
       error('Failed to download PDF invoice');
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
-  const handleDownloadThermal = async (e, bill) => {
-    e.stopPropagation();
-    setDownloadingId(`${bill._id}-thermal`);
-    try {
-      const blob = isOwner
-        ? await billingService.downloadOwnerThermalPDF(bill._id)
-        : await billingService.downloadBillingThermalPDF(bill._id);
-
-      downloadPdfBlob(blob, `Receipt-${bill.invoiceNumber}.pdf`);
-      success(`Thermal receipt ${bill.invoiceNumber} downloaded`);
-    } catch {
-      error('Failed to download thermal receipt');
     } finally {
       setDownloadingId(null);
     }
@@ -138,59 +243,40 @@ export const InvoicesPage = () => {
         success(`Invoice ${billToRefund.invoiceNumber} refunded and stock restored`);
         setRefundModalOpen(false);
         setBillToRefund(null);
-        await fetchBills();
+        setSelectedBill(null);
+        await Promise.all([fetchBills(), fetchSummary()]);
       } else {
         error(res.message || 'Failed to refund bill');
       }
     } catch (err) {
-      error(err.message || 'Failed to refund bill');
+      error(err?.response?.data?.message || err.message || 'Failed to refund bill');
     } finally {
       setRefundLoading(false);
     }
   };
 
-  const resetFilters = () => {
-    setSearch('');
-    setPaymentMethod('');
-    setStatus('');
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const hasActiveFilters = Boolean(search || paymentMethod || status);
-  const completedCount = bills.filter((bill) => bill.status !== 'refunded').length;
-  const refundedCount = bills.filter((bill) => bill.status === 'refunded').length;
-  const visibleTotal = bills.reduce(
-    (sum, bill) => sum + (bill.status === 'refunded' ? 0 : Number(bill.grandTotal) || 0),
-    0
+  const hasActiveFilters = Boolean(
+    search || counterId || paymentStatus || dateRange !== 'all'
   );
 
   return (
-    <main className="mx-auto w-full max-w-[1500px] space-y-5 pb-8 text-slate-800 ">
+    <main className="mx-auto min-h-full w-full max-w-[1440px] space-y-5 rounded-2xl bg-[#FFF7ED] p-4 pb-10 text-slate-800 sm:p-6">
       <SEO
         title="Invoices | Vyapix"
-        description="View, search, download, and manage all your sales invoices."
+        description="View, search, print, and download your sales invoices."
         path="/invoices"
         noIndex={true}
       />
-      {/* Header */}
-      <header className="flex flex-col gap-4 border-b border-slate-200 pb-5  sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-600  ">
-            <ReceiptText size={23} />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-extrabold tracking-tight text-slate-950  sm:text-2xl">
-                Invoices & Sales
-              </h1>
-              <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-orange-700   ">
-                Vyapix Ledger
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-500 ">
-              Track billing history, manage receipts, and handle customer refunds.
-            </p>
-          </div>
+
+      {/* Clean Header */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+            Invoices
+          </h1>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Manage billing records, counter invoices, and receipts.
+          </p>
         </div>
 
         <Button
@@ -199,139 +285,138 @@ export const InvoicesPage = () => {
           onClick={() => navigate('/billing')}
           icon={Plus}
         >
-          Create new bill
+          New Invoice
         </Button>
       </header>
 
-      {/* Summary cards: counts are for the currently loaded page, not all records */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-4   ">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500 text-white shadow-sm shadow-orange-500/20">
-            <CircleDollarSign size={21} />
+      {/* 3 Minimal Summary Cards */}
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="flex items-center gap-3.5 rounded-xl border border-orange-100 bg-white p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+            <ReceiptText size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-slate-500 ">Visible sales total</p>
-            <p className="mt-0.5 truncate text-xl font-extrabold text-slate-950 ">
-              {formatCurrency(visibleTotal)}
+            <p className="text-xs font-medium text-slate-500">Total Invoices</p>
+            <p className="mt-0.5 text-xl font-bold text-slate-900">
+              {summaryLoading ? '—' : summary.totalInvoices}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4  ">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600  ">
-            <CheckCircle2 size={20} />
+        <div className="flex items-center gap-3.5 rounded-xl border border-orange-100 bg-white p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500 text-white">
+            <CircleDollarSign size={20} />
           </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 ">Completed on page</p>
-            <p className="mt-0.5 text-xl font-extrabold text-slate-950 ">{completedCount}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4  ">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-600  ">
-            <RotateCcw size={20} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 ">Refunded on page</p>
-            <p className="mt-0.5 text-xl font-extrabold text-slate-950 ">{refundedCount}</p>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500">Total Sales</p>
+            <p className="mt-0.5 truncate text-xl font-bold text-slate-900">
+              {summaryLoading ? '—' : formatCurrency(summary.totalSalesAmount)}
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4  ">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-600  ">
-            <ShoppingBag size={20} />
+        <div className="flex items-center gap-3.5 rounded-xl border border-orange-100 bg-white p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+            <Clock size={20} />
           </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 ">Invoices on page</p>
-            <p className="mt-0.5 text-xl font-extrabold text-slate-950 ">{bills.length}</p>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500">Pending Amount</p>
+            <p className="mt-0.5 truncate text-xl font-bold text-slate-900">
+              {summaryLoading ? '—' : formatCurrency(summary.pendingAmount)}
+            </p>
           </div>
         </div>
       </section>
 
-      {/* Search and filters */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/30   ">
-        <div className="mb-3 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100 text-orange-600  ">
-            <Filter size={16} />
+      {/* API Error Banner */}
+      {apiError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-white p-3.5 text-sm text-rose-700">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={17} className="shrink-0 text-rose-600" />
+            <span>{apiError}</span>
           </div>
-          <div>
-            <h2 className="text-sm font-extrabold text-slate-900 ">Find an invoice</h2>
-            <p className="text-xs text-slate-500 ">Search records or narrow them by payment and status.</p>
-          </div>
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="ml-auto text-xs font-bold text-orange-600 transition hover:text-orange-700 "
-            >
-              Clear filters
-            </button>
-          )}
+          <Button variant="outline" size="xs" onClick={fetchBills}>
+            Retry
+          </Button>
         </div>
+      )}
 
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      {/* Main White Card: Compact Filters + Invoice Table */}
+      <section className="overflow-hidden rounded-xl border border-orange-100 bg-white">
+        {/* Compact Search & Filter Bar */}
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center">
           <div className="min-w-0 flex-1">
             <SearchInput
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               onClear={() => handleSearchChange('')}
-              placeholder="Search invoice number, customer, or phone..."
+              placeholder="Search invoice no. or customer name..."
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[380px]">
-            <label className="block">
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Payment method</span>
-              <select
-                value={paymentMethod}
-                onChange={(e) => {
-                  setPaymentMethod(e.target.value);
-                  setPagination((prev) => ({ ...prev, page: 1 }));
-                }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-500/15   "
-              >
-                <option value="">All payment modes</option>
-                <option value="cash">Cash</option>
-                <option value="upi">UPI / QR</option>
-                <option value="card">Card</option>
-                <option value="mixed">Mixed</option>
-              </select>
-            </label>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <select
+              value={dateRange}
+              onChange={(e) => {
+                setDateRange(e.target.value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+              aria-label="Filter by date"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none transition focus:border-orange-400"
+            >
+              <option value="all">All Dates</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="last7">Last 7 Days</option>
+              <option value="thisMonth">This Month</option>
+              <option value="lastMonth">Last Month</option>
+            </select>
 
-            <label className="block">
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Invoice status</span>
+            {isOwner && (
               <select
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPagination((prev) => ({ ...prev, page: 1 }));
-                }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-500/15   "
+                value={counterId}
+                onChange={(e) => handleCounterChange(e.target.value)}
+                aria-label="Filter by counter"
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none transition focus:border-orange-400"
               >
-                <option value="">All statuses</option>
-                <option value="completed">Completed</option>
-                <option value="refunded">Refunded</option>
+                <option value="">All Counters</option>
+                <option value="owner">Owner Desk</option>
+                {counters.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                  </option>
+                ))}
               </select>
-            </label>
+            )}
+
+            <select
+              value={paymentStatus}
+              onChange={(e) => {
+                setPaymentStatus(e.target.value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+              aria-label="Filter by payment status"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none transition focus:border-orange-400"
+            >
+              <option value="">All Statuses</option>
+              <option value="paid">Paid</option>
+              <option value="partial">Partial</option>
+              <option value="pending">Pending</option>
+            </select>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="px-2 text-xs font-semibold text-orange-600 hover:text-orange-700"
+              >
+                Reset
+              </button>
+            )}
           </div>
         </div>
-      </section>
 
-      {/* Invoice table */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/30   ">
-        <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-4  sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-950 ">Sales ledger</h2>
-            <p className="mt-0.5 text-xs text-slate-500 ">
-              {pagination.total || 0} invoice{pagination.total === 1 ? '' : 's'} found
-            </p>
-          </div>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600  ">
-            <FileText size={13} />
-            Page {pagination.page} of {pagination.totalPages || 1}
-          </span>
-        </div>
-
+        {/* Invoice Table */}
         {loading ? (
           <div className="p-4">
             <TableSkeleton rows={8} cols={7} />
@@ -343,121 +428,141 @@ export const InvoicesPage = () => {
               title="No invoices found"
               message={
                 hasActiveFilters
-                  ? 'Try changing your search or clearing the filters.'
-                  : 'No sales recorded yet. Open billing to create your first invoice.'
+                  ? 'No invoices match your search or filters.'
+                  : 'No sales recorded yet. Create your first invoice from POS billing.'
               }
             />
             {hasActiveFilters && (
               <div className="mt-3 flex justify-center">
-                <Button variant="outline" size="sm" onClick={resetFilters}>Clear filters</Button>
+                <Button variant="outline" size="sm" onClick={resetFilters}>
+                  Clear filters
+                </Button>
               </div>
             )}
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[860px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500   ">
-                  <th className="px-4 py-3.5">Invoice</th>
-                  <th className="px-4 py-3.5">Date & time</th>
-                  <th className="px-4 py-3.5">Customer</th>
-                  <th className="px-4 py-3.5">Payment</th>
-                  <th className="px-4 py-3.5 text-right">Grand total</th>
-                  <th className="px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5 text-right">Actions</th>
+                <tr className="border-b border-slate-100 bg-orange-50/50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-3">Invoice No.</th>
+                  <th className="px-4 py-3">Date & Time</th>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Counter</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3">Payment Status</th>
+                  <th className="px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 ">
+              <tbody className="divide-y divide-slate-100">
                 {bills.map((bill) => {
                   const isRefunded = bill.status === 'refunded';
+                  const isCancelled = bill.status === 'cancelled';
+                  const counterLabel = getCounterLabel(bill);
                   const isDownloadingA4 = downloadingId === `${bill._id}-a4`;
-                  const isDownloadingThermal = downloadingId === `${bill._id}-thermal`;
+                  const isPrinting = downloadingId === `${bill._id}-print`;
 
                   return (
                     <tr
                       key={bill._id}
-                      onClick={() => navigate(`/invoices/${bill._id}`)}
-                      className="cursor-pointer transition-colors hover:bg-orange-50/60 "
+                      onClick={() => setSelectedBill(bill)}
+                      className="cursor-pointer transition-colors hover:bg-orange-50/50"
                     >
-                      <td className="whitespace-nowrap px-4 py-4">
-                        <div className="flex items-center gap-2.5">
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-600  ">
-                            <ReceiptText size={17} />
+                      <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900">
+                        <span>#{bill.invoiceNumber}</span>
+                        {(isRefunded || isCancelled) && (
+                          <span className="ml-2 text-[10px] font-semibold uppercase text-rose-600">
+                            {bill.status}
                           </span>
-                          <div>
-                            <p className="font-extrabold text-slate-900 ">#{bill.invoiceNumber}</p>
-                            <p className="mt-0.5 text-[10px] font-medium text-slate-400">Invoice record</p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-4 text-xs font-medium text-slate-600 ">
-                        {formatDateTime(bill.createdAt)}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <p className="max-w-[180px] truncate font-bold text-slate-800 ">
-                          {bill.customerName || 'Walk-in customer'}
-                        </p>
-                        {bill.customerPhone && (
-                          <p className="mt-1 text-xs text-slate-500 ">{bill.customerPhone}</p>
                         )}
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-4">
-                        <span className="inline-flex rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-slate-600   ">
-                          {bill.paymentMethod || '—'}
-                        </span>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
+                        {formatDateTime(bill.createdAt)}
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-4 text-right font-extrabold text-slate-950 ">
+                      <td className="px-4 py-3">
+                        <p className="max-w-[190px] truncate font-medium text-slate-800">
+                          {bill.customerName || 'Walk-in Customer'}
+                        </p>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {counterLabel ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                            <Monitor size={13} className="text-orange-500" />
+                            {counterLabel}
+                          </span>
+                        ) : (
+                          <span className="text-xs italic text-slate-400">
+                            Counter information unavailable
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-slate-900">
                         {formatCurrency(bill.grandTotal)}
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-4">
-                        <Badge variant={isRefunded ? 'danger' : 'success'} size="xs">
-                          {isRefunded ? 'Refunded' : 'Completed'}
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <Badge
+                          variant={
+                            isRefunded || isCancelled
+                              ? 'danger'
+                              : getPaymentBadgeVariant(bill.paymentStatus || 'paid')
+                          }
+                          size="xs"
+                        >
+                          {isRefunded
+                            ? 'Refunded'
+                            : isCancelled
+                              ? 'Cancelled'
+                              : (bill.paymentStatus || 'paid').charAt(0).toUpperCase() +
+                                (bill.paymentStatus || 'paid').slice(1)}
                         </Badge>
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-4">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/invoices/${bill._id}`);
+                              setSelectedBill(bill);
                             }}
-                            className="rounded-lg p-2 text-slate-500 transition hover:bg-orange-100 hover:text-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500/30   "
+                            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-orange-100 hover:text-orange-700"
                             title="View invoice"
-                            aria-label={`View invoice ${bill.invoiceNumber}`}
                           >
-                            <Eye size={16} />
+                            <Eye size={15} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handlePrintInvoice(e, bill)}
+                            disabled={isPrinting}
+                            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-orange-100 hover:text-orange-700 disabled:opacity-50"
+                            title="Print invoice"
+                          >
+                            <Printer
+                              size={15}
+                              className={isPrinting ? 'animate-pulse' : ''}
+                            />
                           </button>
 
                           <button
                             type="button"
                             onClick={(e) => handleDownloadA4(e, bill)}
                             disabled={isDownloadingA4}
-                            className="rounded-lg p-2 text-slate-500 transition hover:bg-orange-100 hover:text-orange-700 disabled:cursor-wait disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500/30   "
-                            title="Download A4 PDF"
-                            aria-label={`Download A4 invoice ${bill.invoiceNumber}`}
+                            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-orange-100 hover:text-orange-700 disabled:opacity-50"
+                            title="Download PDF"
                           >
-                            <Download size={16} className={isDownloadingA4 ? 'animate-pulse' : ''} />
+                            <Download
+                              size={15}
+                              className={isDownloadingA4 ? 'animate-pulse' : ''}
+                            />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={(e) => handleDownloadThermal(e, bill)}
-                            disabled={isDownloadingThermal}
-                            className="rounded-lg p-2 text-slate-500 transition hover:bg-orange-100 hover:text-orange-700 disabled:cursor-wait disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500/30   "
-                            title="Download thermal receipt"
-                            aria-label={`Download thermal receipt ${bill.invoiceNumber}`}
-                          >
-                            <Printer size={16} className={isDownloadingThermal ? 'animate-pulse' : ''} />
-                          </button>
-
-                          {isOwner && !isRefunded && (
+                          {isOwner && !isRefunded && !isCancelled && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -465,11 +570,10 @@ export const InvoicesPage = () => {
                                 setBillToRefund(bill);
                                 setRefundModalOpen(true);
                               }}
-                              className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/30  "
+                              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
                               title="Refund invoice"
-                              aria-label={`Refund invoice ${bill.invoiceNumber}`}
                             >
-                              <RotateCcw size={16} />
+                              <RotateCcw size={15} />
                             </button>
                           )}
                         </div>
@@ -482,7 +586,7 @@ export const InvoicesPage = () => {
           </div>
         )}
 
-        <div className="border-t border-slate-100 px-3  sm:px-4">
+        <div className="border-t border-slate-100 px-4">
           <Pagination
             currentPage={pagination.page}
             totalPages={pagination.totalPages}
@@ -493,6 +597,20 @@ export const InvoicesPage = () => {
         </div>
       </section>
 
+      {/* Invoice Details Drawer */}
+      <InvoiceDetailDrawer
+        billId={selectedBill?._id}
+        initialBill={selectedBill}
+        isOwner={isOwner}
+        onClose={() => setSelectedBill(null)}
+        onOpenFullPage={(billId) => navigate(`/invoices/${billId}`)}
+        onRequestRefund={(bill) => {
+          setBillToRefund(bill);
+          setRefundModalOpen(true);
+        }}
+      />
+
+      {/* Refund Confirmation Modal */}
       <ConfirmModal
         isOpen={refundModalOpen}
         onClose={() => {

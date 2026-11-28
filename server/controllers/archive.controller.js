@@ -236,8 +236,8 @@ export const archiveMainProduct = async (req, res) => {
 
         const category = await Category.findOne({
             _id: mainProduct.categoryId,
-            ownerId,
             isActive: true,
+            $or: [{ ownerId: null }, { ownerId }],
         });
 
         if (!category) {
@@ -368,8 +368,8 @@ export const archiveBrandProduct = async (req, res) => {
 
         const mainProduct = await MainProduct.findOne({
             _id: brandProduct.mainProductId,
-            ownerId,
             isActive: true,
+            $or: [{ ownerId: null }, { ownerId }],
         });
 
         if (!mainProduct) {
@@ -568,6 +568,17 @@ export const restoreCategory = async (req, res) => {
                 await category.save({ session });
 
 
+                // Find main products under this category (to scope brand product restore)
+                const categoryMainProducts = await MainProduct.find({
+                    categoryId: category._id,
+                    $or: [{ ownerId: null }, { ownerId }],
+                })
+                    .select("_id")
+                    .session(session);
+                const categoryMainProductIds = categoryMainProducts.map(
+                    (item) => item._id
+                );
+
                 // Restore only main products archived by this category
                 await MainProduct.updateMany(
                     {
@@ -591,6 +602,7 @@ export const restoreCategory = async (req, res) => {
                 await BrandProduct.updateMany(
                     {
                         ownerId,
+                        mainProductId: { $in: categoryMainProductIds },
                         isActive: false,
                         deactivatedBy: "CATEGORY",
                     },
@@ -691,8 +703,8 @@ export const restoreMainProduct = async (req, res) => {
 
         const category = await Category.findOne({
             _id: mainProduct.categoryId,
-            ownerId,
             isActive: true,
+            $or: [{ ownerId: null }, { ownerId }],
         });
 
         if (!category) {
@@ -833,8 +845,8 @@ export const restoreBrandProduct = async (req, res) => {
 
         const mainProduct = await MainProduct.findOne({
             _id: brandProduct.mainProductId,
-            ownerId,
             isActive: true,
+            $or: [{ ownerId: null }, { ownerId }],
         });
 
         if (!mainProduct) {
@@ -945,20 +957,20 @@ export const restoreProduct = async (req, res) => {
         const [category, mainProduct, brandProduct] = await Promise.all([
             Category.findOne({
                 _id: product.categoryId,
-                ownerId,
                 isActive: true,
+                $or: [{ ownerId: null }, { ownerId }],
             }),
 
             MainProduct.findOne({
                 _id: product.mainProductId,
-                ownerId,
                 isActive: true,
+                $or: [{ ownerId: null }, { ownerId }],
             }),
 
             BrandProduct.findOne({
                 _id: product.brandProductId,
-                ownerId,
                 isActive: true,
+                $or: [{ ownerId: null }, { ownerId }],
             }),
         ]);
 
@@ -1311,5 +1323,285 @@ export const permanentDeleteProduct = async (req, res) => {
 
     } catch (error) {
         return sendError(res, error, "Failed to permanently delete product");
+    }
+};
+
+
+// ======================================================
+// 13. GET ARCHIVED ITEMS (ALL LEVELS)
+// ======================================================
+
+export const getArchivedItems = async (req, res) => {
+    try {
+        const ownerId = getOwnerId(req);
+
+        if (!ownerId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized",
+            });
+        }
+
+        const [
+            categories,
+            mainProducts,
+            brandProducts,
+            products,
+            productsWithArchivedVariants,
+        ] = await Promise.all([
+            Category.find({ ownerId, isActive: false }).sort({
+                deactivatedAt: -1,
+                updatedAt: -1,
+            }),
+            MainProduct.find({ ownerId, isActive: false })
+                .populate("categoryId", "name isActive")
+                .sort({ deactivatedAt: -1, updatedAt: -1 }),
+            BrandProduct.find({ ownerId, isActive: false })
+                .populate({
+                    path: "mainProductId",
+                    select: "name categoryId isActive",
+                    populate: {
+                        path: "categoryId",
+                        select: "name isActive",
+                    },
+                })
+                .sort({ deactivatedAt: -1, updatedAt: -1 }),
+            Product.find({ ownerId, isActive: false })
+                .populate("categoryId", "name isActive")
+                .populate("mainProductId", "name isActive")
+                .populate("brandProductId", "name brandName isActive")
+                .sort({ deactivatedAt: -1, updatedAt: -1 }),
+            Product.find({
+                ownerId,
+                sellingType: "VARIANT",
+                "variants.isActive": false,
+            })
+                .populate("categoryId", "name isActive")
+                .populate("mainProductId", "name isActive")
+                .populate("brandProductId", "name brandName isActive"),
+        ]);
+
+        const variants = [];
+        for (const prod of productsWithArchivedVariants) {
+            for (const v of prod.variants || []) {
+                if (v.isActive === false) {
+                    variants.push({
+                        _id: v._id,
+                        productId: prod._id,
+                        productIsActive: prod.isActive,
+                        productName: prod.brandProductId?.name || "Unnamed Product",
+                        brandName: prod.brandProductId?.brandName || "Unbranded",
+                        categoryId: prod.categoryId,
+                        mainProductId: prod.mainProductId,
+                        brandProductId: prod.brandProductId,
+                        variant: v,
+                    });
+                }
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                categories,
+                mainProducts,
+                brandProducts,
+                products,
+                variants,
+            },
+        });
+    } catch (error) {
+        return sendError(res, error, "Failed to fetch archived items");
+    }
+};
+
+
+// ======================================================
+// 14. ARCHIVE / RESTORE / PERMANENT DELETE VARIANT
+// ======================================================
+
+export const archiveVariant = async (req, res) => {
+    try {
+        const ownerId = getOwnerId(req);
+        const { productId, variantId } = req.params;
+
+        if (!ownerId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        if (!isValidId(productId) || !isValidId(variantId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid product or variant ID",
+            });
+        }
+
+        const product = await Product.findOne({
+            _id: productId,
+            ownerId,
+            sellingType: "VARIANT",
+        });
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found",
+            });
+        }
+
+        if (!product.isActive) {
+            return res.status(400).json({
+                success: false,
+                message: "Cannot archive a variant under an inactive product",
+            });
+        }
+
+        const variant = product.variants.id(variantId);
+
+        if (!variant) {
+            return res.status(404).json({
+                success: false,
+                message: "Variant not found",
+            });
+        }
+
+        if (variant.isActive === false) {
+            return res.status(400).json({
+                success: false,
+                message: "Variant is already archived",
+            });
+        }
+
+        variant.isActive = false;
+        variant.deactivatedBy = "SELF";
+        variant.deactivatedAt = new Date();
+
+        await product.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Variant archived successfully",
+        });
+    } catch (error) {
+        return sendError(res, error, "Failed to archive variant");
+    }
+};
+
+
+export const restoreVariant = async (req, res) => {
+    try {
+        const ownerId = getOwnerId(req);
+        const { productId, variantId } = req.params;
+
+        if (!ownerId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        if (!isValidId(productId) || !isValidId(variantId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid product or variant ID",
+            });
+        }
+
+        const product = await Product.findOne({
+            _id: productId,
+            ownerId,
+            sellingType: "VARIANT",
+        });
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found",
+            });
+        }
+
+        if (!product.isActive) {
+            return res.status(400).json({
+                success: false,
+                message: "Restore the parent product first",
+            });
+        }
+
+        const variant = product.variants.id(variantId);
+
+        if (!variant) {
+            return res.status(404).json({
+                success: false,
+                message: "Variant not found",
+            });
+        }
+
+        if (variant.isActive !== false) {
+            return res.status(400).json({
+                success: false,
+                message: "Variant is already active",
+            });
+        }
+
+        variant.isActive = true;
+        variant.deactivatedBy = null;
+        variant.deactivatedAt = null;
+
+        await product.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Variant restored successfully",
+        });
+    } catch (error) {
+        return sendError(res, error, "Failed to restore variant");
+    }
+};
+
+
+export const permanentDeleteVariant = async (req, res) => {
+    try {
+        const ownerId = getOwnerId(req);
+        const { productId, variantId } = req.params;
+
+        if (!ownerId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        if (!isValidId(productId) || !isValidId(variantId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid product or variant ID",
+            });
+        }
+
+        const product = await Product.findOne({
+            _id: productId,
+            ownerId,
+            sellingType: "VARIANT",
+        });
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found",
+            });
+        }
+
+        const variant = product.variants.id(variantId);
+
+        if (!variant) {
+            return res.status(404).json({
+                success: false,
+                message: "Variant not found",
+            });
+        }
+
+        product.variants.pull(variantId);
+        await product.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Variant permanently deleted",
+        });
+    } catch (error) {
+        return sendError(res, error, "Failed to permanently delete variant");
     }
 };

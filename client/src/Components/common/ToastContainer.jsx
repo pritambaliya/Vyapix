@@ -86,21 +86,22 @@ const ToastContainer = () => {
               relative
               overflow-hidden
               flex
-              items-start
+              items-center
               gap-3
-              p-4
+              px-4
+              py-3
               rounded-2xl
               border
               ${style.border}
               ${style.background}
-              shadow-[0_8px_30px_rgba(0,0,0,0.12)]
-              animate-[toastSlideDown_0.35s_ease-out]
+              shadow-[0_10px_30px_rgba(15,23,42,0.12)]
+              animate-[toastSlideDown_0.25s_ease-out]
             `}
           >
             {/* ICON */}
             <div className="
-              w-9 h-9
-              rounded-xl
+              w-8 h-8
+              rounded-full
               bg-slate-50
               flex
               items-center
@@ -114,22 +115,10 @@ const ToastContainer = () => {
             </div>
 
             {/* MESSAGE */}
-            <div className="flex-1 min-w-0 pt-0.5">
-
-              <h4 className="text-sm font-semibold text-slate-900">
-                {toast.title || style.title}
-              </h4>
-
-              <p className="
-                mt-1
-                text-sm
-                text-slate-600
-                leading-relaxed
-                break-words
-              ">
-                {toast.message}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-800 leading-snug break-words">
+                {toast.message || toast.title || style.title}
               </p>
-
             </div>
 
             {/* CLOSE BUTTON */}

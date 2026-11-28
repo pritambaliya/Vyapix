@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, ShoppingCart, Clock } from 'lucide-react';
+import { Menu, ShoppingCart, Clock, Maximize2 } from 'lucide-react';
 
 import Breadcrumbs from './Breadcrumbs';
 import Button from '../common/Button';
-import { useAuth } from '../../context/AuthContext';
+import { useFullscreen } from '../../context/FullscreenContext';
 import { formatTime } from '../../utils/formatters';
 
 export const Navbar = ({ onOpenSidebar }) => {
-  const { user, shop, isOwner } = useAuth();
+  const { enterFullscreen } = useFullscreen();
   const navigate = useNavigate();
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -56,6 +56,17 @@ export const Navbar = ({ onOpenSidebar }) => {
             <span className="hidden sm:inline">POS Terminal</span>
             <span className="sm:hidden">POS</span>
           </Button>
+
+          {/* Fullscreen Mode Toggle */}
+          <button
+            type="button"
+            onClick={enterFullscreen}
+            title="Enter Fullscreen Mode"
+            aria-label="Enter Fullscreen Mode"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-orange-200 bg-white text-slate-600 shadow-xs transition hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </header>

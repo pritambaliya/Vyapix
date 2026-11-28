@@ -28,6 +28,8 @@ export const getCategoryName = (product) => {
 export const getMainProductName = (product) => {
   return (
     product?.mainProductId?.name ||
+    product?.mainProduct?.name ||
+    (typeof product?.mainProduct === 'string' && product.mainProduct) ||
     '—'
   );
 };
